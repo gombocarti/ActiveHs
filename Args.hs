@@ -33,6 +33,7 @@ data Args
         , verboseinterpreter :: Bool
         , recompilecmd  :: String
         , magicname     :: String
+        , daemon        :: Bool
         }
         deriving (Show, Data, Typeable)
 
@@ -58,6 +59,7 @@ myargs = Args
         , verboseinterpreter = False                &= help "Verbose interpreter output in the browser"
         , recompilecmd  = "ghc -O" &= typ "COMMAND" &= help "Command to run before page generation. Default is 'ghc -O'."
         , magicname    = "a9xYf"  &= typ "VARNAME"  &= help "Magic variable name."
+        , daemon       = False                      &= help "Run as a service."
         }  &= summary ("activehs " ++ showVersion version ++ ", (C) 2010-2012 Péter Diviánszky")
            &= program "activehs"
 

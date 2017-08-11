@@ -39,7 +39,7 @@ main :: IO ()
 main = getArgs >>= mainWithArgs
 
 mainWithArgs :: Args -> IO ()
-mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, gendir, mainpage, restartpath, sourcedir, includedir}) = do 
+mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, gendir, mainpage, restartpath, sourcedir, includedir, daemon}) = do 
 
     log <- newLogger verbose $ 
         logdir </> "interpreter.log"
@@ -49,27 +49,30 @@ mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, 
 
     logStrMsg 2 log ("lang: " ++ lang args)
 
-    putStrLn "Press any key to stop the server."
-    t <- forkIO $ httpServe
+    let mainLogic = httpServe
+                      ( setPort port
+                      . setAccessLog (if null logdir then ConfigNoLog else ConfigFileLog (logdir </> "access.log"))
+                      . setErrorLog  (if null logdir then ConfigNoLog else ConfigFileLog (logdir </> "error.log"))
+                      $ emptyConfig
+                      )
+                      (  method GET
+                         (   serveDirectoryWith simpleDirectoryConfig fileservedir
+                         <|> serveHtml ch
+                         <|> ifTop (redirectString mainpage)
+                         <|> pathString restartpath (liftIO $ restart ch >> clearCache cache)
+                         )
+                         <|> method POST (exerciseServer (sourcedir:includedir) (cache, ch) args)
+                         <|> notFound
+                      )
 
-          ( setPort port
-          . setAccessLog (if null logdir then ConfigNoLog else ConfigFileLog (logdir </> "access.log"))
-          . setErrorLog  (if null logdir then ConfigNoLog else ConfigFileLog (logdir </> "error.log"))
-          $ emptyConfig
-          )
-
-          (   method GET
-                  (   serveDirectoryWith simpleDirectoryConfig fileservedir
-                  <|> serveHtml ch
-                  <|> ifTop (redirectString mainpage)
-                  <|> pathString restartpath (liftIO $ restart ch >> clearCache cache)
-                  )
-          <|> method POST (exerciseServer (sourcedir:includedir) (cache, ch) args)
-          <|> notFound
-          )
-    hSetBuffering stdin NoBuffering
-    _ <- getChar
-    killThread t
+    if daemon
+      then mainLogic
+      else do
+        putStrLn "Press any key to stop the server."
+        t <- forkIO mainLogic
+        hSetBuffering stdin NoBuffering
+        _ <- getChar
+        killThread t
   where
     serveHtml ch = do
         p <- getSafePath
