@@ -63,10 +63,9 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
 
     writeFile' (gendir </> what <.> "xml") $ flip writeHtmlString (Pandoc meta $ concat ss')
       $ def
-        { writerStandalone      = True
-        , writerTableOfContents = True
+        { writerTableOfContents = True
         , writerSectionDivs     = True
-        , writerTemplate        = ht
+        , writerTemplate        = Just ht
         }
 
  where
