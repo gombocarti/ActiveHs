@@ -1,14 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Result
-    ( Result (..)
+module ActiveHs.Result (
+      Result (..)
     , hasError
     , filterResults
     ) where
 
-import Lang
 import Data.Data.Compare
+import qualified Data.Text as T
 
-import Text.XHtml.Strict
 import Control.DeepSeq
 
 ---------------------
@@ -22,12 +21,10 @@ data Result
     | TypeKind String String [Err]        -- type with kind and error messages
     | Comparison String Answer String [Err]
     | SearchResults Bool [String]
-    | Error Bool String         -- True: important error message
-    | Dia Html [Err]
-    | Message String (Maybe Result)
+    | Error Bool T.Text         -- True: important error message
+    | Dia String [Err]
+    | Message T.Text (Maybe Result)
     | ShowFailedTestCase String Result
-    | ShowInterpreter Language Int String String{-Id-} Char String (Maybe Result)
-        deriving (Show)
 
 instance NFData Result where
     rnf (ExprType e a b l) = rnf (e,a,b,l)
@@ -36,9 +33,8 @@ instance NFData Result where
     rnf (SearchResults b l) = rnf (b,l)
     rnf (Error b s) = rnf (b, s)
     rnf (Message s r) = rnf (s, r)
-    rnf (Dia h e) = length (showHtmlFragment h) `seq` rnf e
+    rnf (Dia h e) = rnf h `seq` rnf e
     rnf (ShowFailedTestCase testcase res) = rnf (testcase, res)
-    rnf (ShowInterpreter a b c d e f g) = rnf (a,b,c,d,e,f,g)
 
 errors :: Result -> Bool
 errors (ExprType _ _ _ l) = not $ null l
@@ -47,7 +43,6 @@ errors (Comparison _ x _ l) = x /= Yes || not (null l)
 errors (Dia _ l) = not $ null l
 errors (Error i _) = i
 errors (Message _ x) = maybe False errors x
-errors (ShowInterpreter _ _ _ _ _ _ g) = maybe False errors g
 errors _ = False
 
 filterResults :: [Result] -> [Result]
