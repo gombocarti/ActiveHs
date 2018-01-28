@@ -5,16 +5,19 @@ module ActiveHs.Parser (
   , Block (..)
   , Name
   , Correctness (..)
+  , correctnessCata
   , Expression (..)
   , expressionCata
   , InputDesc (..)
   , inputDescCata
   , InputVisibility (..)
   , inputVisibilityCata
+  , getCode
   , ParseError (..)
   , parse
   , printName
   , TestCase (..)
+  , withInputDesc
   ) where
 
 import qualified Text.Pandoc as P
@@ -57,12 +60,16 @@ data Block
         (Set.HashSet Name)        {-defined names-}
         [TestCase]    {-test expressions-}
 
-data InputDesc = InputDesc Expression InputVisibility
+data InputDesc = InputDesc Expression InputVisibility Correctness
 
 -- | Indicates whether an example contains an intentional error, such as it throws an exception or uses `error`.
 data Correctness
-    = HasError
-    | Correct
+    = Correct
+    | HasError
+
+correctnessCata :: a -> a -> Correctness -> a
+correctnessCata correct  _         Correct  = correct
+correctnessCata _        hasError  HasError = hasError
 
 data InputVisibility
     = Evaluation      -- ^ Input and result are shown.
@@ -84,11 +91,11 @@ inputVisibilityCata
 
 -- | A Haskell expression, possibly incorrect
 data Expression
-  = HoogleQuery String Correctness
-  | HoogleQueryInfo String Correctness
-  | Type String Correctness
-  | Kind String Correctness
-  | Value String Correctness
+  = HoogleQuery String
+  | HoogleQueryInfo String
+  | Type String
+  | Kind String
+  | Value String
 
 expressionCata :: (String -> a) -> (String -> a) -> (String -> a) -> (String -> a) -> (String -> a) -> Expression -> a
 expressionCata
@@ -105,8 +112,14 @@ expressionCata
     Kind s -> kind s
     Value s -> value s
 
+getCode :: Expression -> String
+getCode = expressionCata id id id id id
+
 inputDescCata :: (Expression -> InputVisibility -> Correctness -> a) -> InputDesc -> a
 inputDescCata f (InputDesc expr visibility correctness) = f expr visibility correctness
+
+withInputDesc :: InputDesc -> (Expression -> InputVisibility -> Correctness -> a) -> a
+withInputDesc = flip inputDescCata
 
 newtype TestCase = TestCase InputDesc
 

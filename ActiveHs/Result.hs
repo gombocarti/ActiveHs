@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module ActiveHs.Result (
       Result (..)
-    , hasError
-    , filterResults
+    , isError
     ) where
 
 import Data.Data.Compare
@@ -12,30 +11,36 @@ import Control.DeepSeq
 
 ---------------------
 
-type Err = (String, String)
-
 data Result
-    = ExprType Bool String String [Err]        
-            -- expression with type and error messages
-            -- True: this is an error (can't do better just show the type)
-    | TypeKind String String [Err]        -- type with kind and error messages
-    | Comparison String Answer String [Err]
-    | SearchResults Bool [String]
-    | Error Bool T.Text         -- True: important error message
-    | Dia String [Err]
-    | Message T.Text (Maybe Result)
-    | ShowFailedTestCase String Result
+    = ExprType String String
+    | TypeKind String String
+    | Comparison String Answer String
+    | SearchResults [String]
+    | GoodSolution
+    | CantDecideSolution String String
+    | WrongSolution String String
+    | Message T.Text
+    | Error
+      { generalInfo :: T.Text
+      , details :: T.Text
+      }
+    | Dia String
+    | TestsPassed
+    | TestsFailed T.Text Result
 
 instance NFData Result where
-    rnf (ExprType e a b l) = rnf (e,a,b,l)
-    rnf (TypeKind a b l) = rnf (a,b,l)
-    rnf (Comparison a x b l) = rnf (a,x,b,l)
-    rnf (SearchResults b l) = rnf (b,l)
-    rnf (Error b s) = rnf (b, s)
-    rnf (Message s r) = rnf (s, r)
-    rnf (Dia h e) = rnf h `seq` rnf e
-    rnf (ShowFailedTestCase testcase res) = rnf (testcase, res)
+    rnf (ExprType expr type_) = rnf (expr, type_)
+    rnf (TypeKind type_ kind) = rnf (type_, kind)
+    rnf (Comparison a x b) = rnf (a,x,b)
+    rnf (SearchResults l) = rnf l
+    
+    rnf (Message msg) = rnf msg
+    rnf (Error general details_) = rnf (general, details_)
+    rnf (Dia html) = rnf html
+    rnf TestsPassed = ()
+    rnf (TestsFailed test result) = rnf (test, result)
 
+{-
 errors :: Result -> Bool
 errors (ExprType _ _ _ l) = not $ null l
 errors (TypeKind _ _ l) = not $ null l
@@ -44,7 +49,8 @@ errors (Dia _ l) = not $ null l
 errors (Error i _) = i
 errors (Message _ x) = maybe False errors x
 errors _ = False
-
+-}
+{-
 filterResults :: [Result] -> [Result]
 filterResults rs = case filter (not . weakOrHardError) rs of
     [] -> case [e | e@(Error True _) <- rs] of
@@ -53,12 +59,17 @@ filterResults rs = case filter (not . weakOrHardError) rs of
     rs -> case filter (not . searchResult) rs of
         [] -> rs
         rs -> {- nubBy f -} rs
+-}
 {-
  where
     f (ExprType _ _ _ _) (ExprType _ _ _ _) = True
     f _ _ = False
 -}
 
+isError :: Result -> Bool
+isError (Error {}) = True
+isError _          = False
+{-
 hasError :: [Result] -> Bool
 hasError rs = case filter (not . weakOrHardError) rs of
     [] -> True
@@ -73,3 +84,4 @@ searchResult :: Result -> Bool
 searchResult (SearchResults _ _) = True
 searchResult _ = False
 
+-}

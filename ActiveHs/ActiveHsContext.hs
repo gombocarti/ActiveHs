@@ -4,7 +4,7 @@
 module ActiveHs.ActiveHsContext where
 
 import ActiveHs.Converter (ConversionError)
-import ActiveHs.GHCi (EvaluationError)
+import ActiveHs.GHCi (EvaluationError, GHCiService)
 import ActiveHs.Parser (Expression)
 import ActiveHs.Result (Result)
 import ActiveHs.Translation.I18N (I18N)
@@ -17,13 +17,7 @@ type ActiveHsHandler s a = Handler ActiveHsContext s a
 
 newtype SnapContext a = SnapContext (IORef a)
 
-data GhciService = GhciService
-  { evaluate     :: Expression -> I18N -> IO (Either EvaluationError Result)
---  , testSolution :: FilePath -> String -> I18N -> IO (Either EvaluationError Result)
---  , reload       :: FilePath -> IO ()
-  }
-
-type GhciContext = SnapContext GhciService
+type GhciContext = SnapContext GHCiService
 
 data ActiveHsContext = ActiceHsContext
   { _ghciContext      :: Snaplet GhciContext

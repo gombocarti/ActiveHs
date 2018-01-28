@@ -2,10 +2,12 @@
 
 module ActiveHs.GHCi (
     GHCi
+  , GHCiService(..)
   , runGHCi
   , getI18N
   , getHoogleDb
   , EvaluationError(..)
+  , evaluationErrorCata
   ) where
 
 import           ActiveHs.Base (WrapData(WrapData), WrapData2(WrapData2))
@@ -44,25 +46,27 @@ data GHCiContext = GHCiContext
   , g_hoogleDb :: Maybe FilePath
   }
 
-evaluate :: P.Expression -> GHCi R.Result
---evaluate expr@(getCommand -> (cmd, arg)) = do
-evaluate expression = do
+data GHCiService = GHCiService
+  { evaluate     :: P.Expression -> I18N -> IO (Either EvaluationError R.Result)
+--  , testSolution :: FilePath -> String -> I18N -> IO (Either EvaluationError Result)
+  , reload       :: FilePath -> IO ()
+  }
+
+eval :: P.Expression -> GHCi R.Result
+eval expression = do
   i18n <- getI18N
   force <$> P.expressionCata
               hoogle
               hoogleInfo
               (\expr -> do
-                xx <- lift $ GHC.typeOf expr
-                return $ R.ExprType False expr xx [])
+                type_ <- lift $ GHC.typeOf expr
+                return $ R.ExprType expr type_)
               (\type_ -> do
-                xx <- lift $ GHC.kindOf type_
-                return $ R.TypeKind type_ xx [])
+                kind <- lift $ GHC.kindOf type_
+                return $ R.TypeKind type_ kind)
               (\expr -> (exprType expr >>= exprPpr) `catchE`
                 \tyErr -> (typeKind expr) `orElse` (hoogleInfo expr) `orElse` MC.throwM tyErr)
               expression
-{-        _   ->  return $ force $ Error True $ 
-                   translateParam1 i18n (E.msg_Eval_NotSupported "The %s command is not supported.") (':':cmd)
--}
 
   where
     exprType :: String -> GHCi String
@@ -70,19 +74,20 @@ evaluate expression = do
 
     exprPpr :: String -> GHCi R.Result
     exprPpr expr = do
+      i18n <- getI18N
       ty <- exprType expr
       case specialize ty of
-        Left err         -> return (R.Error True (T.pack err))
+        Left err         -> return (R.Error (i18n $ E.msg_Eval_SpecializeError "Internal error during type checking. Sorry.") (T.pack err))
         Right (ty',ty'') -> do
           result <- (pprData expr ty'') `orElse` (ppr expr ty')
           case result of
             Nothing -> do
               i18n <- getI18N
               return $ R.Error
-                        True
+                        (i18n $ E.msg_Eval_Error "Error during evaluation.")
                         (translateParam1Str
                           i18n
-                          (E.msg_Eval_DontKnowHowToEvaluate "I don't know how to evaluate this expression, but I can show its type: %s")
+                          (E.msg_Eval_DontKnowHowToEvaluate "I don't know how to evaluate this expression but I can show its type: %s")
                           ty') -- or ty'' ??
             Just res ->
               return res
@@ -100,7 +105,7 @@ evaluate expression = do
     typeKind :: String -> GHCi R.Result
     typeKind expr = do
        k <- lift $ GHC.kindOf expr
-       return $ R.TypeKind expr k []
+       return $ R.TypeKind expr k
 
     hoogle :: String -> GHCi R.Result
     hoogle term = do
@@ -122,7 +127,7 @@ evaluate expression = do
     catchE = MC.catch
 
     noInfo :: I18N -> String -> R.Result
-    noInfo i18n query = R.Message (translateParam1Str i18n (E.msg_Eval_NoHoogleInfo "No info for %s") query) Nothing
+    noInfo i18n query = R.Message (translateParam1Str i18n (E.msg_Eval_NoHoogleInfo "No info for %s") query)
 
 loadFile :: String -> GHCi ()
 loadFile filename = lift $ GHC.loadModules [filename]
@@ -136,13 +141,13 @@ runGHCi m i18n hoogleDb = do
     where
       toEvaluationError :: GHC.InterpreterError -> EvaluationError
       toEvaluationError err = EvaluationError
-        { generalInfo = i18n $ interpreterErrorCata 
-                          (const (E.msg_Eval_WontCompile "Won't compile"))
-                          (const (E.msg_Eval_UnknownError "Unknown error"))
-                          (const (E.msg_Eval_NotAllowed "Not allowed"))
-                          (const (E.msg_Eval_GhcException "GHCi exception"))
-                          err
-        , details = T.pack $
+        { errGeneralInfo = i18n $ interpreterErrorCata 
+                             (const (E.msg_Eval_WontCompile "Won't compile"))
+                             (const (E.msg_Eval_UnknownError "Unknown error"))
+                             (const (E.msg_Eval_NotAllowed "Not allowed"))
+                             (const (E.msg_Eval_GhcException "GHCi exception"))
+                             err
+        , errDetails = T.pack $
                       interpreterErrorCata
                         (unlines . map GHC.errMsg)  -- GHC.WontCompile
                         id                          -- GHC.UnknownError
@@ -160,9 +165,12 @@ interpreterErrorCata wontCompile unknownError notAllowed ghcException err =
     GHC.GhcException l -> ghcException l
        
 data EvaluationError = EvaluationError
-  { generalInfo :: T.Text
-  , details     :: T.Text
+  { errGeneralInfo :: T.Text
+  , errDetails     :: T.Text
   }
+
+evaluationErrorCata :: (T.Text -> T.Text -> a) -> EvaluationError -> a
+evaluationErrorCata f (EvaluationError generalInfo details) = f generalInfo details
 
 getI18N :: GHCi I18N
 getI18N = asks g_i18n
@@ -178,8 +186,8 @@ pprintData y (WrapData x)
       return Nothing
   | otherwise = do
       a <- Eval.eval 1 700 x
-      let ([p], es) = GenFun.numberErrors [a]
-      return . Just $ R.ExprType False (show $ GenDoc.toDoc p) y es
+      let ([p], _es) = GenFun.numberErrors [a]
+      return . Just $ R.ExprType (show $ GenDoc.toDoc p) y
 
 pprint :: String -> Dyn.Dynamic -> IO (Maybe R.Result)
 pprint ident d
@@ -200,7 +208,7 @@ pprint ident d
     ff = fmap g . SVG.render 10 (-16, -10) (16, 10) 5 2048 ident
 
     g :: (XH.Html, [(String, String)]) -> Maybe R.Result
-    g (htm, err) = Just (R.Dia (XH.renderHtmlFragment htm) err)
+    g (htm, _err) = Just (R.Dia (XH.renderHtmlFragment htm))
 
     showFunc :: (RealFrac a, Real b) => (a -> b) -> Dia.Diagram
     showFunc = FunGraph.displayFun (-16,-10) (16,10)
@@ -221,32 +229,28 @@ wrap2 a b = "WrapData2 " ++ GHC.parens a ++ " " ++ GHC.parens b
 compareMistGen :: I18N -> String -> WrapData2 -> String -> IO R.Result
 compareMistGen i18n ident (WrapData2 x y) goodsol
     | Data.dataTypeName (Data.dataTypeOf x) == "Diagram" 
-    = return $ R.Message (i18n $ E.msg_Eval_CantCompareDiagrams "Can't decide the equality of diagrams (yet).") Nothing
+    = return $ R.Message (i18n $ E.msg_Eval_CantCompareDiagrams "Can't decide the equality of diagrams.")
 compareMistGen i18n ident (WrapData2 x y) goodsol = do
     (ans, a', b') <- C.compareData 0.8 0.2 700 x y
     return $ case ans of
-        C.Yes -> R.Message (i18n $ E.msg_Eval_GoodSolution "Good solution! Another good solution:")
-                          $ Just $ R.ExprType False goodsol "" []
-        _ ->
-            let x = case ans of
-                    C.Maybe _  -> i18n (E.msg_Eval_CantDecide "I cannot decide whether this is a good solution:")
-                    C.No       -> i18n (E.msg_Eval_WrongSolution "Wrong solution:")
-            in R.Message x $ Just $ showPair ans (a', GenFun.mistify b')
-
-
+        C.Yes -> R.Message (i18n $ E.msg_Eval_GoodSolution "Good solution!")
+        C.Maybe _ -> uncurry R.CantDecideSolution $ showPair (a', GenFun.mistify b')
+        C.No -> uncurry R.WrongSolution $ showPair (a', GenFun.mistify b')
 ---------------------------------
 
 compareClearGen :: I18N -> String -> WrapData2 -> IO R.Result
 compareClearGen i18n _ident (WrapData2 x y)
     | Data.dataTypeName (Data.dataTypeOf x) == "Diagram"
-    = return $ R.Message (i18n $ E.msg_Eval_CantCompareDiagrams "Can't decide the equality of diagrams (yet).") Nothing
+    = return $ R.Message (i18n $ E.msg_Eval_CantCompareDiagrams "Can't decide the equality of diagrams.")
 compareClearGen lang _ident (WrapData2 x y) = do
     (ans, a', b') <- C.compareData 0.8 0.2 700 x y
     return $ case ans of
 --        C.Yes -> []
-        _ -> showPair ans (a', b')
+        _ -> let (a, b) = showPair (a', b')
+             in R.Comparison a ans b
 
 
-showPair :: C.Answer -> (Gen.GenericData, Gen.GenericData) -> R.Result
-showPair x (a, b) = R.Comparison (show (GenDoc.toDoc a')) x (show (GenDoc.toDoc b')) es
-  where ([a', b'], es) = GenFun.numberErrors [a, b]
+-- TODO: do we need this?
+showPair :: (Gen.GenericData, Gen.GenericData) -> (String, String)
+showPair (a, b) = (show (GenDoc.toDoc a'), show (GenDoc.toDoc b'))
+  where ([a', b'], _) = GenFun.numberErrors [a, b]

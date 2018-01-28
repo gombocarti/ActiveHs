@@ -84,6 +84,8 @@ Library
     directory,
     containers,
     filepath,
+    ghc,
+    ghc-paths,
     lens,
     text,
     snap,

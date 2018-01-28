@@ -8,19 +8,22 @@ import qualified ActiveHs.Bootstrap as B
 import qualified ActiveHs.Parser as P
 import qualified ActiveHs.Result as R
 
-import ActiveHs.GHCi (GHCi, runGHCi, EvaluationError)
---import qualified Smart as S
---import qualified Result as R
+import           ActiveHs.GHCi (GHCi, GHCiService, EvaluationError)
+import qualified ActiveHs.GHCi as GHCi
 --import qualified Bootstrap as B
-import ActiveHs.Args
+import qualified ActiveHs.Args as Args
+import           ActiveHs.Args (Args)
 --import Html (renderResult, delim, getOne)
-import ActiveHs.Logger (logMessage)
-import ActiveHs.Translation.I18N (I18N)
+import           ActiveHs.Logger (logMessage, LogLevel(..))
+import           ActiveHs.Translation.I18N (I18N)
 import qualified ActiveHs.Translation.Entries as E
 
 import qualified Language.Haskell.Exts.Pretty as HPty
 import qualified Language.Haskell.Exts.Syntax as HSyn
 
+import qualified Data.HashSet as Set
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import           Text.Blaze ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html.Renderer.String as HR
@@ -37,11 +40,16 @@ import Data.Time (UTCTime)
 
 import Control.Monad
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.Except (ExceptT)
+import qualified Control.Monad.Except as Except
 import Data.Monoid ((<>))
 import Data.List
 import Data.Char hiding (Format)
 import Data.String (fromString)
+
+import qualified GHC
+import           GHC.Paths (libdir)
+import qualified DynFlags
 
 ----------------------------------
 
@@ -55,9 +63,7 @@ data ConversionError
   | CompilationError
     { generalInfo :: String
     , file        :: FilePath
-    , command     :: String
-    , stdOutput   :: String
-    , stdError    :: String
+    , output      :: String
     }
   | EvaluationError
     { generalInfo :: String
@@ -69,63 +75,91 @@ data ConversionError
     , graph       :: String
     , dotDetails  :: String
     }
+  | HtmlGeneratingError
+    { generalInfo :: String
+    }
+
+conversionErrorCata :: (String -> P.ParseError -> a)
+                    -> (String -> FilePath -> String -> a)
+                    -> (String -> String -> Either R.Result EvaluationError -> a)
+                    -> (String -> String -> String -> a)
+                    -> (String -> a)
+                    -> ConversionError
+                    -> a
+conversionError parsing compilation evaluation dot htmlGenerating convErr =
+  case convErr of
+    ParseError general details -> parsing general details
+    CompilationError general file_ output_ -> compilation general file_ output_
+    EvaluationError general expr details -> evaluation general expr details
+    DotError general graph_ details -> dot general graph_ details
+    HtmlGeneratingError general -> htmlGenerating general
 
 data ConverterConfig = ConverterConfig
   { sourceDir  :: FilePath
   , genDir     :: FilePath
-  , compileCmd :: ProgramWithArgs
   , hoogleDb   :: Maybe FilePath
   }
 
-convert :: I18N -> ConverterConfig -> Logger -> GhciService -> String -> IO (Either ConversionError ())
+convert :: I18N -> ConverterConfig -> Logger -> GHCiService -> FilePath -> IO (Either ConversionError ())
 convert i18n config logger ghci filename =
-    runExceptT $ whenOutOfDate () output input $ do
-        whenOutOfDate () object input $ do
-            logMessage DEBUG $ object ++ " is out of date, regenerating"
-            let ProgramWithArgs (ghc, args) = recompileCmd config
-            (exitCode, out, err) <- liftIO $ readProcessWithExitCode ghc (args ++ [input]) ""
-            if exitCode == ExitSuccess
-              then
-                liftIO $ C.reload ghci filename
-              else
-                throwError $ CompilationError
-                  { generalInfo = "Error during compilation"
-                  , command = recompilecmd
-                  , file = input
-                  , stdOutput = out
-                  , stdError = err
-                  }
-        logMessage DEBUG $ output ++ " is out of date, regenerating"
-        case P.parse input of
-          Right doc -> extract i18n ghci args what doc
+    runExceptT $ do
+      needsConversion <- isOutOfDate output input
+      when needsConversion $ do
+        logMessage DEBUG logger $ output ++ " is out of date, regenerating"
+        compile filename
+        liftIO $ GHCi.reload ghci filename
+        contents <- liftIO $ TIO.readFile filename
+        case P.parse contents of
+          Right doc -> extract i18n ghci config what doc
           Left err -> throwError $ ParseError
             { generalInfo = "Error during parsing"
             , parseDetails = err
             }
- where
-   input, output, object :: FilePath
+  where
+    input, output, object :: FilePath
+    input  = (Args.sourceDir dirs) </> filename <.> "lhs"
+    output = (Args.genDir dirs)    </> filename <.> "html"
+    object = (Args.sourceDir dirs) </> filename <.> "o"
 
-   input  = (sourceDir dirs) </> filename <.> "lhs"
-   output = (genDir dirs)    </> filename <.> "xml"
-   object = (sourceDir dirs) </> filename <.> "o"
+    compile :: FilePath -> Converter ()
+    compile file = do
+      GHC.runGhc (Just libdir) $ do
+        dflags <- GHC.getSessionDynFlags
+        let ghciCompatible = DynFlags.updateWays $ dflags
+              { DynFlags.ghcLink = DynFlags.LinkDynLib
+              , DynFlags.hscTarget = DynFlags.HscAsm
+              , DynFlags.ghcMode = DynFlags.CompManager
+              , DynFlags.ways = [DynFlags.WayDyn]
+              }
+        GHC.setSessionDynFlags ghciCompatible
+        target <- GHC.guessTarget file Nothing
+        GHC.setTargets [target]
+        GHC.load LoadAllTargets
+      return ()
+{-        throwError $ CompilationError
+        { generalInfo = "Error during compilation"
+        , file = input
+        , output = err
+        } -}
 
 
-extract :: Bool -> I18N -> S.TaskChan -> Args -> String -> P.Doc -> Converter ()
-extract verbose i18n ghci (Args {lang, templatedir, sourcedir, exercisedir, gendir, magicname, hoogledb}) what (P.Doc meta header contents) = do
-    liftIO $ writeEx (what <.> ext) [showEnv $ importsHiding []]
+extract :: I18N -> GHCiService -> ConverterConfig -> String -> P.Doc -> Converter ()
+extract i18n ghci config filename (P.Doc meta header contents) = do
+    liftIO $ writeEx (filename <.> ext) [showEnv $ importsHiding []]
     ss' <- zipWithM processBlock [1..] contents
-
-    liftIO $ writeFile' (gendir </> what <.> "xml") $ flip Pandoc.writeHtmlString (Pandoc.Pandoc meta ss')
-      $ Pandoc.def
-        { Pandoc.writerTableOfContents = True
-        , Pandoc.writerSectionDivs     = True
-        }
+    let options = Pandoc.def
+          { Pandoc.writerTableOfContents = True
+          , Pandoc.writerSectionDivs     = True
+          }
+    case Pandoc.runPure $ Pandoc.writeHtml5 options (Pandoc.Pandoc meta ss') of
+      Right html -> liftIO $ writeFile' (gendir </> filename <.> "html") html
+      Left err -> throwError $ HtmlGeneratingError { generalInfo = "Error while generating html output." }
 
  where
     ext :: String
     ext = "hs"
     
-    lang' = case span (/= '_') . reverse $ what of
+    lang' = case span (/= '_') . reverse $ filename of
         (l, "")                -> lang
         (l, _) | length l > 2  -> lang
         (x, _)                 -> reverse x
@@ -136,21 +170,21 @@ extract verbose i18n ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
 
     writeFile' :: MonadIO m => FilePath -> String -> m ()
     writeFile' f s = liftIO $ do
-        when verbose $ putStrLn $ f ++ " is written."
+        logMessage DEBUG $ f ++ " is written."
         createDirectoryIfMissing True (dropFileName f)
         writeFile f s
 
     readFile' :: MonadIO m => FilePath -> m String
     readFile' f = liftIO $ do
-        when verbose $ putStrLn $ f ++ " is to read..."
+        logMessage DEBUG $ f ++ " is to read..."
         readFile f
 
     system' :: MonadIO m => String -> m ExitCode
     system' s = liftIO $ do
-        when verbose $ putStrLn $ "executing " ++ s
+        logMessage DEBUG $ "executing " ++ s
         system s
 
-    importsHiding :: [P.Name] -> String
+    importsHiding :: Set.HashSet P.Name -> String
     importsHiding funnames = case header of
         HSyn.Module loc (HSyn.ModuleName modname) directives _ _ imps _ ->
             HPty.prettyPrint $ 
@@ -162,38 +196,36 @@ extract verbose i18n ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
 
 ----------------------------
 
-    eval :: P.Expression -> Converter R.Result
-    eval expr = do
-      result <- liftIO $ runGHCi (GHCi.evaluate expr) i18n hoogledb
+    eval :: String -> Converter R.Result
+    eval expr correctness = do
+      result <- liftIO $ GHCi.evaluate ghci expr i18n
       case result of
-        Right evalResult ->
-          case (correctness, R.hasError [evalResult]) of
-            (P.Correct, False) -> return evalResult
-            (P.HasError, True) -> return evalResult
-            _                  -> throwError $
-              EvaluationError
-                { generalInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation"
-                , expression = expr
-                , evalDetails = Left evalResult
-                }
-        Left err -> throwError $
-              EvaluationError
-                { generalInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation"
-                , expression = expr
-                , evalDetails = Right err
-                }
+        Right evalResult -> return evalResult
+        Left evalError -> throwError $
+          EvaluationError
+            { generalInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation"
+            , expression = expr
+            , evalDetails = Left evalResult
+            }
 
-    showInput :: P.InputDesc -> R.Result -> String -> Pandoc.Block
-    showInput (P.InputDesc _expr visiblity _correctness) res ident =
-      rawHtml $ P.inputVisibilityCata
-                evaluation -- evaluation
-                folded     -- folded
-                answer     -- answer
-                mempty     -- hidden
-                visibility
+    inputDescToHtml :: P.InputDesc -> String -> Converter Pandoc.Block
+    inputDescToHtml input ident =
+      withInputDesc input $ \expr visibility correctness -> do
+        res <- P.correctnessCata
+                 (eval expr)        -- Correct
+                 (Except.catchError -- HasError
+                   (eval expr)
+                   (\err -> R.Error (\generalInfo details -> T.unlines [generalInfo, details]) err))
+        return $ rawHtml $
+          P.inputVisibilityCata
+            (evaluation res) -- evaluation
+            folded           -- folded
+            (answer res)     -- answer
+            mempty           -- hidden
+            visibility
       where
-        evaluation :: H.Html
-        evaluation = B.form "" $
+        evaluation :: R.Result -> H.Html
+        evaluation res = B.form "" $
           B.textInput (inputId ident) <> (B.well (renderResult res)
                                             ! A.id (fromString $ resultId ident))
 
@@ -202,8 +234,8 @@ extract verbose i18n ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
           B.textInput (inputId ident) <> (B.well mempty
                                             ! A.id (fromString $ resultId ident))
 
-        answer :: H.Html
-        answer = B.well (renderResult res)
+        answer :: R.Result -> H.Html
+        answer res = B.well (renderResult res)
 
         exercise :: H.Html
         exercise = B.form "" $
@@ -217,43 +249,36 @@ extract verbose i18n ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
     resultId ident = ident ++ "_result"
 
     processBlock :: Int -> P.Block -> Converter Pandoc.Block
-    processBlock n (P.Example expression) = do
+    processBlock n (P.Example inputdesc) = do
       result <- eval expression 
       return $ showExpression expression result (show n)
-    processBlock n (P.OneLineExercise expression) = do
-      _ <- eval expression
-      let code = P.expressionCata (\_ _ src -> src) expression
-          m5 = mkHash $ show n ++ code
-          i = show m5
-          fn = what ++ "_" ++ i <.> ext
-          act = getOne "eval" fn i i
-      writeEx fn [showEnv $ importsHiding [], "\n" ++ magicname ++ " = " ++ code]
+    processBlock n (P.OneLineExercise code) = do
+      _ <- eval (P.Value code) P.Correct
+      let fn = filename ++ "_" ++ show n <.> ext
+      writeEx fn [showEnv $ importsHiding Set.empty, "\n" ++ "e = " ++ code]
       return $ rawHtml $ B.form "" $
         B.textInput (inputId (show n))
         <> (B.well mempty ! A.id (fromString $ resultId (show n)))
     processBlock n (P.DefinitionExercise _ visi hidden names tests) = do
-        let i = show $ mkHash $ unlines names
-            j = "_j" ++ i
-            fn = what ++ "_" ++ i <.> ext
+        let fn = filename ++ "_" ++ show n <.> ext
             (static_, inForm, rows) = if null hidden
                 then ([], visi, length visi) 
                 else (visi, [], 2 + length hidden)
 
         writeEx fn  [ showEnv $ importsHiding names ++ "\n" ++ unlines static_
-                    , unlines $ hidden, show tests, j, i
+                    , unlines $ hidden, show tests
                     , show names
                     ]
         return . rawHtml $
           mkCodeBlock static_ <>
           B.textArea (inputId (show n))
-    processBlock _ (P.Raw (Pandoc.CodeBlock ("",[t],[]) l)) 
+    processBlock n (P.Raw (Pandoc.CodeBlock ("",[t],[]) l)) 
         | t `elem` ["dot","neato","twopi","circo","fdp","dfdp","latex"] = do
             tmpdir <- liftIO $ getTemporaryDirectory
-            let i = show $ mkHash $ t ++ l
-                fn = what ++ i
-                imgname = takeFileName fn <.> "png"
-                outfile = gendir </> fn <.> "png"
-                tmpfile = tmpdir </> takeFileName fn <.> if t=="latex" then "tex" else t
+            let fn = filename ++ show n
+                imgname = fn <.> "png"
+                outfile = (genDir config) </> fn <.> "png"
+                tmpfile = tmpdir </> fn <.> if t=="latex" then "tex" else t
 
             writeFile' tmpfile $ unlines $ case t of
                 "latex" -> 
@@ -280,7 +305,7 @@ extract verbose i18n ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
 
             if x == ExitSuccess 
                 then return . rawHtml $ H.img ! A.src (fromString imgname)
-                else throwError $ DotError
+                else Except.throwError $ DotError
                        { generalInfo = "processDot"
                        , graph = tmpfile
                        , dotDetails = show x
@@ -321,16 +346,16 @@ showEnv prelude
               , "{-# LINE 1 \"input\" #-}"
               ]
 
-mkImport :: String -> [P.Name] -> HSyn.ImportDecl ()
-mkImport m d 
+mkImport :: String -> Set.HashSet P.Name -> HSyn.ImportDecl ()
+mkImport m d
     = HSyn.ImportDecl
         { HSyn.importAnn = ()
-        , HSyn.importModule = HSyn.ModuleName m
+        , HSyn.importModule = HSyn.ModuleName () m
         , HSyn.importQualified = False
         , HSyn.importSrc = False
         , HSyn.importPkg = Nothing
         , HSyn.importAs = Nothing
-        , HSyn.importSpecs = Just (True, map (HSyn.IVar . mkName) d)
+        , HSyn.importSpecs = Just (HSyn.ImportSpecList () True (map (HSyn.IVar () . mkName) (Set.toList d)))
         , HSyn.importSafe = False
         }
 
@@ -341,18 +366,18 @@ mkName n       = HSyn.Symbol () n
 
 mkImport_ :: String -> String -> HSyn.ImportDecl ()
 mkImport_ magic m 
-    = (mkImport m []) { HSyn.importQualified = True, HSyn.importAs = Just $ HSyn.ModuleName magic }
+    = (mkImport m Set.empty) { HSyn.importQualified = True, HSyn.importAs = Just $ HSyn.ModuleName () magic }
 
 ------------------
 
-whenOutOfDate :: MonadIO m => b -> FilePath -> FilePath -> m b -> m b
-whenOutOfDate def x src m = do
+isOutOfDate :: MonadIO m => FilePath -> FilePath -> m BOol
+isOutOfDate x src = do
     a <- modTime x
     b <- modTime src
-    case (a, b) of
-        (Nothing, Just _) -> m
-        (Just t1, Just t2) | t1 < t2 -> m
-        _   -> return def
+    return $ case (a, b) of
+               (Nothing, Just _) -> True
+               (Just t1, Just t2) -> t1 < t2
+               _   -> False
  where
    modTime :: MonadIO m => FilePath -> m (Maybe UTCTime)
    modTime f = do
@@ -361,5 +386,3 @@ whenOutOfDate def x src m = do
          then liftIO (fmap Just $ getModificationTime f)
          else return Nothing
 
-
---------------------
