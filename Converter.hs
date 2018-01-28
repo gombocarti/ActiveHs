@@ -137,8 +137,6 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
             $  mkCodeBlock static_
             ++ showBlockSimple lang' fn i rows (intercalate "\n" inForm)
 
-    processBlock ii (OneLineExercise 'H' correct exp) 
-        = return []
     processBlock ii (OneLineExercise p correct exp) = do
         let m5 = mkHash $ show ii ++ exp
             i = show m5
@@ -147,14 +145,16 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
 
         when (p == 'R') $ writeEx fn [showEnv mode $ importsHiding [], "\n" ++ magicname ++ " = " ++ exp]
         when verbose $ putStrLn $ "interpreting  " ++ exp
-        result <- if p `elem` ['F', 'R']
-                    then return Nothing
-                    else do
-                      result <- interp False m5 lang' ghci (exercisedir </> fn) exp Nothing
-                      when (correct == hasError [result])
-                        $ error $ translate lang' "Erroneous evaluation"  ++ ": " ++ exp ++ " ; " ++ showHtmlFragment (renderResult result)
-                      return $ Just result
-        return [rawHtml $ showHtmlFragment $ showInterpreter lang' 60 act i p exp result]
+        result <- interp False m5 lang' ghci (exercisedir </> fn) exp Nothing
+        when (correct == hasError [result])
+          $ error $ translate lang' "Erroneous evaluation"  ++ ": " ++ exp ++ " ; " ++ showHtmlFragment (renderResult result)
+        return $
+          if p == 'H'
+            then []
+            else let toShow = if p `elem` ['F', 'R']
+                                then Nothing
+                                else Just result
+                 in [rawHtml $ showHtmlFragment $ showInterpreter lang' 60 act i p exp toShow]
 
     processBlock _ (Text (CodeBlock ("",[t],[]) l)) 
         | t `elem` ["dot","neato","twopi","circo","fdp","dfdp","latex"] = do
