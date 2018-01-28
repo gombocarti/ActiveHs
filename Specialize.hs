@@ -23,32 +23,36 @@ specialize a
 
             in Right (prettyPrint t', prettyPrint t'')
 
-split :: Type -> ([(String, [String])], Type)
-split (TyForall Nothing l t) 
-    = ( map (\x -> (fst (head x), map snd x)) $ groupBy ((==) `on` fst) $ sort
-          [(v,s) | ClassA (UnQual (Ident s)) [TyVar (Ident v)]<-l]
+split :: Type loc -> ([(String, [String])], Type loc)
+split (TyForall _ Nothing (Just l) t) 
+    = ( let assertions = case l of
+                           CxSingle _ assert -> [assert]
+                           CxTuple _ asserts -> asserts
+                           CxEmpty _ -> []
+        in map (\x -> (fst (head x), map snd x)) $ groupBy ((==) `on` fst) $ sort
+          [(v,s) | ClassA _ (UnQual _ (Ident _ s)) [TyVar _ (Ident _ v)] <- assertions]
       , t
       )
 split t 
     = ([], t)
 
-convert :: ([(String, [String])], Type) -> (Type, Type)
+convert :: ([(String, [String])], Type loc ) -> (Type loc, Type loc)
 convert (m, t) = (app True mm t, app False mm t)  where mm = map resolve m
 
-app :: Bool -> [(String, [[Char]])] -> Type -> Type
+app :: Bool -> [(String, [[Char]])] -> Type loc -> Type loc
 app b m t = f t where
-    f (TyFun a b) = TyFun (f a) (f b)
-    f (TyTuple bo l) = TyTuple bo $ map f l
-    f (TyList t) = TyList (f t)
-    f (TyParen t) = TyParen (f t)
-    f (TyApp x t) = TyApp (f x) (f t)
-    f (TyVar (Ident s)) = mkV $ head $ [y | (v,x)<-m, v==s, y<-ff  x] ++ ff allT
+    f (TyFun loc a b) = TyFun loc (f a) (f b)
+    f (TyTuple loc bo l) = TyTuple loc bo $ map f l
+    f (TyList loc t) = TyList loc (f t)
+    f (TyParen loc t) = TyParen loc (f t)
+    f (TyApp loc x t) = TyApp loc (f x) (f t)
+    f (TyVar _ (Ident loc s)) = mkV loc $ head $ [y | (v,x)<-m, v==s, y<-ff  x] ++ ff allT
     f t = t
 
     ff = if b then id else reverse
 
-mkV :: String -> Type
-mkV v = TyVar $ Ident v
+mkV :: loc -> String -> Type loc
+mkV loc v = TyVar loc $ Ident loc v
 
 resolve :: (String, [String]) -> (String, [String])
 resolve (v, l) = (v, foldl1 intersect $ map res l)

@@ -1,4 +1,5 @@
 {-# LANGUAGE RelaxedPolyRec, PatternGuards, ViewPatterns #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 module Parse 
     ( ParseMode (..)
@@ -13,9 +14,11 @@ module Parse
     , parseQuickCheck
     ) where
 
+import qualified Data.Text as T
 import Text.Pandoc
 
 import qualified Language.Haskell.Exts.Parser as HPar
+import qualified Language.Haskell.Exts.SrcLoc as HLoc
 import qualified Language.Haskell.Exts.Syntax as HSyn
 
 import Data.List.Split (splitOn)
@@ -31,16 +34,14 @@ data ParseMode = HaskellMode -- | AgdaMode
                  deriving (Show, Enum, Eq)
 
 data Module
-    = HaskellModule HSyn.Module
+    = HaskellModule (HSyn.Module HLoc.SrcSpanInfo)
 --    | AgdaModule ASyn.Module
-    deriving (Show)
 
 data Doc
     = Doc
         Meta{-title, author, date-}
         Module{-module directives, module name, imports-}
         [BBlock]
-        deriving (Show)
 
 data BBlock
     = Text Block{-pandoc block-}
@@ -54,7 +55,6 @@ data BBlock
         [String]{-hidden lines-}
         [Name]{-defined names-}
         [String]{-test expressions-}
-        deriving (Show)
 
 type Prompt = Char  -- see the separate documentation
 
@@ -71,7 +71,7 @@ testCommandList = "EeFfH"
 mainParse :: ParseMode -> FilePath -> IO Doc
 mainParse mode s = do
     c <- readFile s
-    case readMarkdown pState . unlines . concatMap preprocess . lines $ c of
+    case runPure . readMarkdown pState . T.pack . unlines . concatMap preprocess . lines $ c of
         Right (Pandoc meta (CodeBlock ("",["sourceCode","literate","haskell"],[]) h: blocks)) -> do
             header <- parseModule mode $ h
             fmap (Doc meta header) $ collectTests mode $ map ({-highlight . -}interpreter . Text) blocks
@@ -94,9 +94,8 @@ mainParse mode s = do
                      | otherwise = [l]
         
         pState = def
-            { readerSmart = True
-            , readerStandalone = True
-            , readerExtensions = Set.insert Ext_literate_haskell $ readerExtensions def
+            { readerStandalone = True
+            , readerExtensions = enableExtension Ext_literate_haskell $ pandocExtensions
             }
         
         interpreter :: BBlock -> BBlock
@@ -138,16 +137,22 @@ processHaskellLines isExercise l_ = return (concatMap fst visible, concatMap fst
 
     getFName (HPar.ParseOk x) = case x of
         HSyn.TypeSig _ a _                       -> map printName a
-        HSyn.PatBind _ (HSyn.PVar a) _ _         -> [printName a]
-        HSyn.FunBind (HSyn.Match _ a _ _ _ _ :_) -> [printName a]
-        HSyn.TypeDecl _ a _ _                    -> [printName a]
-        HSyn.DataDecl _ _ _ a _ x _              -> printName a: [printName n | HSyn.QualConDecl _ _ _ y<-x, n <- getN y]
+        HSyn.PatBind _ (HSyn.PVar _ a) _ _         -> [printName a]
+        HSyn.FunBind _ (HSyn.Match _ a _ _ _ :_) -> [printName a]
+        HSyn.FunBind _ (HSyn.InfixMatch _ _ a _ _ _ :_) -> [printName a]
+        HSyn.TypeDecl _ dh _                    -> [printName (getFromDeclHead dh)]
+        HSyn.DataDecl _ _ _ dh x _              -> printName (getFromDeclHead dh): [printName n | HSyn.QualConDecl _ _ _ y<-x, n <- getN y]
         _                                        -> []
     getFName _ = []
 
-    getN (HSyn.ConDecl n _) = [n]
-    getN (HSyn.InfixConDecl _ n _) = [n]
-    getN (HSyn.RecDecl n l) = n: concatMap fst l
+    getFromDeclHead (HSyn.DHead _ n) = n
+    getFromDeclHead (HSyn.DHInfix _ _ n) = n
+    getFromDeclHead (HSyn.DHParen _ dh) = getFromDeclHead dh
+    getFromDeclHead (HSyn.DHApp _ dh _) = getFromDeclHead dh
+
+    getN (HSyn.ConDecl _ n _) = [n]
+    getN (HSyn.InfixConDecl _ _ n _) = [n]
+    getN (HSyn.RecDecl _ n l) = n: concat [names | HSyn.FieldDecl _ names _ <- l]
 
     isVisible (HPar.ParseOk (HSyn.TypeSig _ _ _)) = True
     isVisible (HPar.ParseOk (HSyn.InfixDecl _ _ _ _)) = True
@@ -181,6 +186,6 @@ parseQuickCheck :: String -> ([String], String)
 parseQuickCheck s = case splitOn ";;" s of
     l -> (init l, last l)
 
-printName :: HSyn.Name -> Name
-printName (HSyn.Ident x) = x
-printName (HSyn.Symbol x) = x
+printName :: HSyn.Name a -> Name
+printName (HSyn.Ident _ x) = x
+printName (HSyn.Symbol _ x) = x

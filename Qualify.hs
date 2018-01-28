@@ -3,6 +3,7 @@ module Qualify
     ( qualify
     ) where
 
+import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.Syntax
@@ -24,20 +25,20 @@ qualify q ns x = case parseExpWithMode defaultParseMode x of
     ParseOk y -> Right $ prettyPrint $ runReader (trExp y) ns
     e         -> Left $ show e
  where 
-    trQName :: QName -> R QName
-    trQName y@(UnQual x) = do
+    trQName :: QName SrcSpanInfo -> R (QName SrcSpanInfo)
+    trQName y@(UnQual loc x) = do
         b <- asks (printName x `elem`)
-        return $ if b then (Qual (ModuleName q) x) else y
+        return $ if b then (Qual loc (ModuleName loc q) x) else y
     trQName y = return y
 
-    trExp :: Exp -> R Exp
+    trExp :: Exp SrcSpanInfo -> R (Exp SrcSpanInfo)
     trExp (Lambda loc pats e) = do
         pats' <- tr pats
         e' <- local (\\ vars pats) $ trExp e
         return $ Lambda loc pats' e'
-    trExp (Let b e) = do
+    trExp (Let loc b e) = do
         (b', e') <- local (\\ vars b) $ tr (b, e)
-        return $ Let b' e'
+        return $ Let loc b' e'
     trExp x = gmapM tr x
 
 {-
@@ -51,14 +52,15 @@ Alt SrcLoc Pat GuardedAlts Binds
     vars :: Data a => a -> [String]
     vars = map printName . everything (++) (mkQ [] patVars_)
 
-    patVars_ :: Pat -> [Name]
-    patVars_ (PVar x) = [x]
-    patVars_ (PAsPat x _) = [x]
-    patVars_ (PNPlusK x _) = [x]
+    patVars_ :: Pat SrcSpanInfo -> [Name SrcSpanInfo]
+    patVars_ (PVar _ x) = [x]
+    patVars_ (PAsPat _ x _) = [x]
+    patVars_ (PNPlusK _ x _) = [x]
     patVars_ _ = []
 
-    printName (Ident x) = x
-    printName (Symbol x) = x
+    printName :: Name a -> String
+    printName (Ident _ x) = x
+    printName (Symbol _ x) = x
 
 {- !!!
 PatTypeSig SrcLoc Pat Type	

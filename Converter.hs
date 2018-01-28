@@ -13,17 +13,21 @@ import Lang
 import Args
 import Hash
 
+import qualified Data.Text as T
+import qualified Data.Text.IO as T (writeFile)
+
 import qualified Language.Haskell.Exts.Pretty as HPty
+import qualified Language.Haskell.Exts.SrcLoc as HLoc
 import qualified Language.Haskell.Exts.Syntax as HSyn
 
 import Text.XHtml.Strict hiding (lang)
-import Text.Pandoc
+import Text.Pandoc hiding (getModificationTime)
 
 import System.Process (readProcessWithExitCode)
 import System.Cmd
 import System.FilePath
 import System.Exit
-import System.Directory (getTemporaryDirectory, getModificationTime, doesFileExist, getTemporaryDirectory, createDirectoryIfMissing)
+import System.Directory as Dir (getTemporaryDirectory, getModificationTime, doesFileExist, getTemporaryDirectory, createDirectoryIfMissing)
 --import Data.Time (diffUTCTime) 
 
 import Control.Monad
@@ -61,12 +65,15 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
     ht <- readFile' $ templatedir </> lang' ++ ".template"
     putStrLn $ "Lang is:" ++ lang'
 
-    writeFile' (gendir </> what <.> "xml") $ flip writeHtmlString (Pandoc meta $ concat ss')
-      $ def
-        { writerTableOfContents = True
-        , writerSectionDivs     = True
-        , writerTemplate        = Just ht
-        }
+    let writerOptions = def
+          { writerTableOfContents = True
+          , writerSectionDivs     = True
+          , writerTemplate        = Just ht
+          }
+
+    case runPure $ writeHtml5String writerOptions (Pandoc meta $ concat ss') of
+      Right html -> writeFile' (gendir </> what <.> "xml") html
+      Left err -> error $ show err
 
  where
     ext = case mode of
@@ -78,12 +85,12 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
         (x, _)                 -> reverse x
 
     writeEx f l =
-        writeFile' (exercisedir </> f) $ intercalate delim l
+        writeFile' (exercisedir </> f) $ T.pack $ intercalate delim l
 
     writeFile' f s = do
         when verbose $ putStrLn $ f ++ " is written."
         createDirectoryIfMissing True (dropFileName f)
-        writeFile f s
+        T.writeFile f s
 
     readFile' f = do
         when verbose $ putStrLn $ f ++ " is to read..."
@@ -94,9 +101,9 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
         system s
 
     importsHiding funnames = case modu of
-        HaskellModule (HSyn.Module loc (HSyn.ModuleName modname) directives _ _ imps _) ->
+        HaskellModule (HSyn.Module loc (Just (HSyn.ModuleHead _ modname _ _)) directives imps _) ->
             HPty.prettyPrint $ 
-              HSyn.Module loc (HSyn.ModuleName "") directives Nothing Nothing
+              HSyn.Module loc Nothing directives
                 ([mkImport modname funnames, mkImport_ ('X':magicname) modname] ++ imps) []
 --        _ -> error "error in Converter.extract"
 
@@ -158,7 +165,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
                 outfile = gendir </> fn <.> "png"
                 tmpfile = tmpdir </> takeFileName fn <.> if t=="latex" then "tex" else t
 
-            writeFile' tmpfile $ unlines $ case t of
+            writeFile' tmpfile $ T.pack $ unlines $ case t of
                 "latex" -> 
                     [ "\\documentclass{article}"
                     , "\\usepackage{ucs}"
@@ -236,27 +243,27 @@ showEnv HaskellMode prelude
     ++ prelude
     ++ "\n{-# LINE 1 \"input\" #-}\n"
 
-mkImport :: String -> [Name] -> HSyn.ImportDecl
+mkImport :: HSyn.ModuleName HLoc.SrcSpanInfo -> [Name] -> HSyn.ImportDecl HLoc.SrcSpanInfo
 mkImport m d 
     = HSyn.ImportDecl
-        { HSyn.importLoc = undefined
-        , HSyn.importModule = HSyn.ModuleName m
+        { HSyn.importAnn = HLoc.noSrcSpan
+        , HSyn.importModule = m
         , HSyn.importQualified = False
         , HSyn.importSrc = False
         , HSyn.importPkg = Nothing
         , HSyn.importAs = Nothing
-        , HSyn.importSpecs = Just (True, map (HSyn.IVar . mkName) d)
+        , HSyn.importSpecs = Just (HSyn.ImportSpecList HLoc.noSrcSpan True (map (HSyn.IVar HLoc.noSrcSpan . mkName) d))
         , HSyn.importSafe = False
         }
 
-mkName :: String -> HSyn.Name
+mkName :: String -> HSyn.Name HLoc.SrcSpanInfo
 mkName n@(c:_)
-  | isLetter c = HSyn.Ident n
-mkName n       = HSyn.Symbol n
+  | isLetter c = HSyn.Ident HLoc.noSrcSpan n
+mkName n       = HSyn.Symbol HLoc.noSrcSpan n
 
-mkImport_ :: String -> String -> HSyn.ImportDecl
+mkImport_ :: String -> HSyn.ModuleName HLoc.SrcSpanInfo -> HSyn.ImportDecl HLoc.SrcSpanInfo
 mkImport_ magic m 
-    = (mkImport m []) { HSyn.importQualified = True, HSyn.importAs = Just $ HSyn.ModuleName magic }
+    = (mkImport m []) { HSyn.importQualified = True, HSyn.importAs = Just $ HSyn.ModuleName HLoc.noSrcSpan magic }
 
 ------------------
 
