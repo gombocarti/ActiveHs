@@ -52,7 +52,6 @@ Executable activehs
     Args,
     Simple,
     Smart,
-    Cache,
     Hash,
     Specialize,
     Qualify,

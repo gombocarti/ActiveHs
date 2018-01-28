@@ -4,7 +4,6 @@
 module Main where
 
 import Smart hiding (hoogledb)
-import Cache
 import Converter
 import Args
 import Special
@@ -45,7 +44,6 @@ mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, 
         logdir </> "interpreter.log"
 
     ch <- startGHCiServer [sourcedir] log hoogledb
-    cache <- newCache 10
 
     logStrMsg 2 log ("lang: " ++ lang args)
 
@@ -59,9 +57,9 @@ mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, 
                          (   serveDirectoryWith simpleDirectoryConfig fileservedir
                          <|> serveHtml ch
                          <|> ifTop (redirectString mainpage)
-                         <|> pathString restartpath (liftIO $ restart ch >> clearCache cache)
+                         <|> pathString restartpath (liftIO $ restart ch)
                          )
-                         <|> method POST (exerciseServer (sourcedir:includedir) (cache, ch) args)
+                         <|> method POST (exerciseServer (sourcedir:includedir) ch args)
                          <|> notFound
                       )
 
@@ -88,10 +86,8 @@ mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, 
 
 ---------------------------------------------------------------
 
-type TaskChan' = (Cache (Int, T.Text), TaskChan)
-
-exerciseServer :: [FilePath] -> TaskChan' -> Args -> Snap ()
-exerciseServer sourcedirs (cache, ch) args@(Args {magicname, lang, exercisedir, verboseinterpreter}) = do
+exerciseServer :: [FilePath] -> TaskChan -> Args -> Snap ()
+exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verboseinterpreter}) = do
     params <- fmap show getParams
     when (length params > 3000) $ do
         writeText "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>Too long request.</body></html>"
@@ -99,36 +95,23 @@ exerciseServer sourcedirs (cache, ch) args@(Args {magicname, lang, exercisedir, 
 
     let md5Id = mkHash params   -- could be more efficient
     liftIO $ logStrMsg 2 (logger ch) $ " eval " ++ show md5Id ++ " " ++ params
-    j <- liftIO $ lookupCache cache md5Id
-    (>>= writeText) $ case j of
-      Left (delay, res) -> liftIO $ do
-        logStrMsg 2 (logger ch) $ "   ch " ++ show md5Id
-        threadDelay delay
-        return res
-      Right cacheAction -> do
-        time <- liftIO $ getCurrentTime
-        res <- fmap renderHtml $ do
-            Just [ss, fn_, x, y, T.unpack -> lang']  <- fmap sequence $ mapM getTextParam ["c","f","x","y","lang"]
+--  (>>= writeText)
+    res <- (do
+               Just [ss, fn_, x, y, T.unpack -> lang'] <- fmap sequence $ mapM getTextParam ["c","f","x","y","lang"]
 
-            let fn = exercisedir </> T.unpack fn_
-                ext = case takeExtension fn of
-                        ('.':ext) -> ext
-                        _         -> ""
-            fnExists <- liftIO $ doesFileExist fn
-            if fnExists
-              then do
-                Just task <- liftIO $ fmap (eval_ ext ss y . T.splitOn (T.pack delim)) $ T.readFile fn
-                liftIO $ exerciseServer' ('X':magicname) ch verboseinterpreter fn x lang' md5Id task
-              else
-                return (inconsistencyError lang')
-         <|> return (inconsistencyError lang)
-
-        liftIO $ do
-            time' <- getCurrentTime
-            let delay = round $ 1000000 * (realToFrac $ diffUTCTime time' time :: Double) :: Int
-            logStrMsg 2 (logger ch) $ "  end " ++ show md5Id ++ " " ++ show delay ++ " ms  " ++ T.unpack res
-            cacheAction (delay, res)
-            return res
+               let fn = exercisedir </> T.unpack fn_
+                   ext = case takeExtension fn of
+                           ('.':ext) -> ext
+                           _         -> ""
+               fnExists <- liftIO $ doesFileExist fn
+               if fnExists
+                 then do
+                   Just task <- liftIO $ fmap (eval_ ext ss y . T.splitOn (T.pack delim)) $ T.readFile fn
+                   liftIO $ exerciseServer' ('X':magicname) ch verboseinterpreter fn x lang' md5Id task
+                 else
+                   return (inconsistencyError lang'))
+           <|> return (inconsistencyError lang)
+    writeText (renderHtml res)
 
   where
     inconsistencyError :: String -> Html
