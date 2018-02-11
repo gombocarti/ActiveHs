@@ -99,7 +99,7 @@ showLines e
     | otherwise    = toHtml e
 
 mkBott :: (String, String) -> Html
-mkBott (i, e) = toHtml ("  " ++ i ++ ": ") +++ showLines e
+mkBott (i, e) = showLines (i ++ ": " ++ e)
 
 splitComment :: String -> (String, String)
 splitComment x = case splitComment' x of

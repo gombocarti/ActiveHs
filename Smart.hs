@@ -28,7 +28,7 @@ import qualified Data.Data.Eval as C
 import qualified Data.Data.Compare as C
 import Data.Data.GenRep hiding (Error)
 import Data.Data.GenRep.Functions (mistify, numberErrors)
-import Data.Data.GenRep.Doc (toDoc)
+import Data.Data.GenRep.Doc (valueToDoc)
 
 import Data.Dynamic hiding (typeOf)
 import qualified Data.Data as D
@@ -169,7 +169,7 @@ pprintData idi y (WrapData x)
   | otherwise = do
       a <- C.eval 1 700 x
       let ([p], es) = numberErrors [a]
-      return . Just $ ExprType False (show $ toDoc p) y es
+      return . Just $ ExprType False (show $ valueToDoc p) y es
 
 
 pprint :: String -> Dynamic -> IO (Maybe Result)
@@ -232,7 +232,7 @@ compareClearGen lang idi (WrapData2 x y) = do
 
 
 showPair :: C.Answer -> (GenericData, GenericData) -> Result
-showPair x (a, b) = Comparison (show (toDoc a')) x (show (toDoc b')) es
+showPair x (a, b) = Comparison (show (valueToDoc a')) x (show (valueToDoc b')) es
   where ([a', b'], es) = numberErrors [a, b]
 
 
