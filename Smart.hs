@@ -34,6 +34,7 @@ import Data.Dynamic hiding (typeOf)
 import qualified Data.Data as D
 import Control.DeepSeq (force)
 import Control.Monad (void)
+import qualified Control.Monad.Catch as MC
 import Control.Monad.Trans (liftIO)
 import Data.Char (isAlpha)
 import Data.Maybe (catMaybes, maybe)
@@ -86,12 +87,12 @@ dropSpace _ = Nothing
 
 interp :: Bool -> Hash -> Language -> TaskChan -> FilePath -> String 
     -> Maybe (String -> Interpreter Result) -> IO Result
-interp  verboseinterpreter (show -> idi) lang ch fn s@(getCommand -> (cmd, arg)) extraStep
+interp  verboseinterpreter (show -> idi) lang ch fn s@(getCommand -> (cmd, expr)) extraStep
     = force <$> case cmd of
 
-        "?" -> maybe (return $ noInfo arg) (\db -> query db arg) (hoogledb ch)
+        "?" -> hoogle expr
 
-        "i" -> maybe (return $ noInfo arg) (\db -> queryInfo lang db arg) (hoogledb ch)
+        "i" -> hoogleInfo expr
 
         c | c `elem` ["t","k",""]
            -> fmap (either (Error True . showErr lang) id)
@@ -99,60 +100,79 @@ interp  verboseinterpreter (show -> idi) lang ch fn s@(getCommand -> (cmd, arg))
           $ case cmd of
               "t" ->
                 do
-                  xx <- typeOf arg
-                  return $ ExprType False arg xx []
+                  xx <- typeOf expr
+                  return $ ExprType False expr xx []
                 `catchE`
                   (return . Error True . showErr lang)
               "k" ->
                 do 
-                  xx <- kindOf arg
-                  return $ TypeKind arg xx []
+                  xx <- kindOf expr
+                  return $ TypeKind expr xx []
                 `catchE`
                   (return . Error True . showErr lang)
               "" ->
-                do
-                  (typ, pprData, ppr) <- do
-                      ty <- typeOf s
-                      case specialize ty of
-                        Left err -> return (Error True err, Nothing, Nothing)
-                        Right (ty',ty'') -> do
-                          pprData <- do
-                              wd <- interpret ("wrapData (" ++ parens s ++ " :: " ++ ty'' ++")") (as :: WrapData)
-                              liftIO (pprintData idi ty'' wd)
-                            `catchE`
-                              (return . Just . Error False . showErr lang)
-                          ppr <- do
-                              dyn <- interpret ("toDyn (" ++ parens s ++ " :: " ++ ty' ++")") (as :: Dynamic)
-                              liftIO (pprint idi dyn)
-                            `catchE`
-                              (return . Just . Error False . showErr lang)
-                          return (ExprType True s ty [], pprData, ppr)
-                    `catchE`
-                      (\e -> return (Error False (showErr lang e), Nothing, Nothing))
-                  kind <- do
-                      k <- kindOf s
-                      return $ TypeKind s k []
-                    `catchE`
-                      (return . Error False . showErr lang)
-                  mExtraRes <- case extraStep of
-                      Nothing   -> return Nothing
-                      Just step -> do
-                        extraRes <- step arg `catchE` (return . Error True . showErr lang)
-                        return $ Just extraRes
-                  mHooInfo <- case (hoogledb ch) of
-                                Nothing -> return Nothing
-                                Just db -> do
-                                  hoo <- liftIO $ query db s
-                                  hooInfo <- liftIO $ queryInfo lang db s
-                                  return $ Just [hoo, hooInfo]
-                  let everyResult = catMaybes [mExtraRes, pprData, ppr] ++ maybe [] id mHooInfo ++ [typ, kind]
-                  case filterResults everyResult of
-                    [] -> return typ
-                    (res:_) -> return res
+                (exprPpr expr) `catchE`
+                  (\tyErr ->
+                     let throwErr = MC.throwM tyErr
+                     in (typeKind expr) `orElse` (maybe throwErr ($ expr) extraStep) `orElse` throwErr)
+
         _   ->  return $ force $ Error True $ 
                    translate lang "The" ++ " :" ++ cmd ++ " " ++ translate lang "command is not supported" ++ "."
 
  where
+    mDb :: Maybe FilePath
+    mDb = hoogledb ch
+
+    exprType :: String -> Interpreter String
+    exprType = typeOf
+
+    exprPpr :: String -> Interpreter Result
+    exprPpr expr = do
+      ty <- exprType expr
+      case specialize ty of
+        Left err         -> return (Error True "Internal error during type checking. Sorry.")
+        Right (ty',ty'') -> do
+          result <- (pprData expr ty'') `orElseMaybe` (ppr expr ty')
+          case result of
+            Nothing -> do
+              return $ Error False ("I don't know how to evaluate this expression but I can show its type: " ++ ty') -- or ty'' ??
+            Just res ->
+              return res
+
+    pprData :: String -> String -> Interpreter (Maybe Result)
+    pprData expr type_ =  do
+      wd <- interpret ("wrapData (" ++ parens expr ++ " :: " ++ type_ ++")") (as :: WrapData)
+      liftIO (pprintData idi type_ wd)
+
+    ppr :: String -> String -> Interpreter (Maybe Result)
+    ppr expr type_ = do
+      dyn <- interpret ("toDyn (" ++ parens expr ++ " :: " ++ type_ ++")") (as :: Dynamic)
+      liftIO (pprint idi dyn)
+
+    typeKind :: String -> Interpreter Result
+    typeKind expr = do
+       k <- kindOf expr
+       return $ TypeKind expr k []
+
+    hoogle :: String -> IO  Result
+    hoogle expr = maybe (noHoogle expr) (\db -> query db expr) mDb
+
+    hoogleInfo :: String -> IO Result
+    hoogleInfo expr = maybe (noHoogle expr) (\db -> queryInfo lang db expr) mDb
+
+    noHoogle :: String -> IO Result
+    noHoogle expr = return (noInfo expr)
+
+    orElse :: Interpreter a -> Interpreter a -> Interpreter a
+    orElse x y = x `catchE` \_ -> y
+
+    orElseMaybe :: Interpreter (Maybe a) -> Interpreter (Maybe a) -> Interpreter (Maybe a)
+    orElseMaybe x y = do
+      res <- x `orElse` (return Nothing)
+      case res of
+        Just _ -> return res
+        Nothing -> y
+
     catchE :: Interpreter a -> (InterpreterError -> Interpreter a) -> Interpreter a
     catchE = Simple.catchError_fixed
 
