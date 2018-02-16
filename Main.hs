@@ -38,7 +38,7 @@ main :: IO ()
 main = getArgs >>= mainWithArgs
 
 mainWithArgs :: Args -> IO ()
-mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, gendir, mainpage, restartpath, sourcedir, includedir, daemon}) = do 
+mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, staticdir, publicdir, gendir, mainpage, restartpath, sourcedir, includedir, daemon}) = do 
 
     log <- newLogger verbose $ 
         logdir </> "interpreter.log"
@@ -54,7 +54,8 @@ mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, fileservedir, 
                       $ emptyConfig
                       )
                       (  method GET
-                         (   serveDirectoryWith simpleDirectoryConfig fileservedir
+                         (   serveDirectoryWith simpleDirectoryConfig staticdir
+                         <|> serveDirectoryWith simpleDirectoryConfig publicdir
                          <|> serveHtml ch
                          <|> ifTop (redirectString mainpage)
                          <|> pathString restartpath (liftIO $ restart ch)

@@ -18,8 +18,9 @@ data Args
         , gendir        :: String
         , exercisedir   :: String
         , templatedir   :: String
-        , fileservedir  :: String
+        , staticdir     :: String
         , logdir        :: String
+        , publicdir     :: String
 
         , hoogledb      :: (Maybe String)
 
@@ -37,15 +38,16 @@ data Args
         }
         deriving (Show, Data, Typeable)
 
-myargs :: Args
-myargs = Args
+myargs :: FilePath -> Args
+myargs dataDir = Args
         { sourcedir     = "."     &= typDir         &= help "Directory of lhs files to serve. Default is '.'"
         , includedir    = []      &= typDir         &= help "Additional include directory. You can specify more than one. Empty by default."
         , gendir        = "html"  &= typDir         &= help "Directory to put generated content to serve. Default is 'html'"
         , exercisedir   = "exercise" &= typDir      &= help "Directory to put generated exercises to serve. Default is 'exercise'"
-        , templatedir   = ""      &= typDir         &= help "Directory of html template files for pandoc. Default points to the distribution's directory."
-        , fileservedir  = ""      &= typDir         &= help "Files in this directory will be served as they are (for css and javascript files). Default points to the distribution's directory."
+        , templatedir   = (dataDir </> "template")      &= typDir         &= help "Directory of html template files for pandoc. Default points to the distribution's directory."
+        , staticdir  = (dataDir </> "copy")      &= typDir         &= help "Files in this directory will be served as they are (for css and javascript files). Default points to the distribution's directory."
         , logdir        = "log"   &= typDir         &= help "Directory to put log files in. Default is 'log'."
+        , publicdir     = ""      &= typDir         &= help "Directory of public (not css or javascript) files. Files in this directory will be served as-is."
 
         , hoogledb      = Nothing      &= typFile        &= help "Hoogle database file"
 
@@ -63,18 +65,6 @@ myargs = Args
         }  &= summary ("activehs " ++ showVersion version ++ ", (C) 2010-2012 Péter Diviánszky")
            &= program "activehs"
 
-completeArgs :: Args -> IO Args
-completeArgs args
---    | gendir args == "" = completeArgs (args {gendir = root args </> "html"})
---    | exercisedir args == "" = completeArgs (args {exercisedir = root args </> "exercise"})
-    | templatedir args == "" = do
-        dir <- getDataDir
-        completeArgs (args {templatedir = dir </> "template"})
-    | fileservedir args == "" = do
-        dir <- getDataDir
-        completeArgs (args {fileservedir = dir </> "copy"})
-completeArgs args = return args
-
 
 createDirs :: Args -> IO ()
 createDirs (Args {sourcedir, gendir, exercisedir, logdir}) 
@@ -86,7 +76,8 @@ createDirs (Args {sourcedir, gendir, exercisedir, logdir})
 
 getArgs :: IO Args
 getArgs = do
-    args <- cmdArgs myargs >>= completeArgs
+    dataDir <- getDataDir
+    args <- cmdArgs (myargs dataDir)
     createDirs args
     return args
 
