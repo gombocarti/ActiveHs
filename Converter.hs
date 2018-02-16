@@ -145,15 +145,19 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
 
         when (p == 'R') $ writeEx fn [showEnv mode $ importsHiding [], "\n" ++ magicname ++ " = " ++ exp]
         when verbose $ putStrLn $ "interpreting  " ++ exp
-        result <- interp False m5 lang' ghci (exercisedir </> fn) exp Nothing
-        when (correct == hasError [result])
-          $ error $ translate lang' "Erroneous evaluation"  ++ ": " ++ exp ++ " ; " ++ showHtmlFragment (renderResult result)
+        mResult <- if (p == 'F' && null exp)
+                     then return Nothing
+                     else do
+                        result <- interp False m5 lang' ghci (exercisedir </> fn) exp Nothing
+                        when (correct == hasError [result])
+                          $ error $ translate lang' "Erroneous evaluation"  ++ ": " ++ exp ++ " ; " ++ showHtmlFragment (renderResult result)
+                        return $ Just result
         return $
           if p == 'H'
             then []
             else let toShow = if p `elem` ['F', 'R']
                                 then Nothing
-                                else Just result
+                                else mResult
                  in [rawHtml $ showHtmlFragment $ showInterpreter lang' 60 act i p exp toShow]
 
     processBlock _ (Text (CodeBlock ("",[t],[]) l)) 
