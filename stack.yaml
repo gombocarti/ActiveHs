@@ -2,7 +2,7 @@ packages:
   - '.'
 extra-deps:
   - git: https://github.com/poor-a/ActiveHs-misc.git
-    commit: 8ff9cadf0f57f7702d46719f6eabbbe0daabebeb
+    commit: 03492d21fd695554f6031b363c833e7c9e5b4ad6
     subdirs:
       - data-pprint
       - dia-base
