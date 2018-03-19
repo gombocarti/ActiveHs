@@ -64,8 +64,8 @@ exerciseServer'
 
 exerciseServer' qualifier ch verbose fn sol lang m5 task = do
     let error = do
-            logStrMsg 0 (logger ch) $ "Server error:" ++ show m5
-            return $ renderResult $ Error True "Server error."
+            logStrMsg 0 (logger ch) $ unwords ["Timed out:", T.unpack sol, show m5]
+            return $ renderResult $ Error True "Timed out."
 
         action = eval task `catch` \(e :: SomeException) ->             -- ???
                   return $ renderResult $ Error True $ show e
