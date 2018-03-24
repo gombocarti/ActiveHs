@@ -59,7 +59,7 @@ myargs dataDir = Args
         , static        = False                     &= help "Do not regenerate pages."
         , verbose       = 2                         &= help "Verbose activehs output"
         , verboseinterpreter = False                &= help "Verbose interpreter output in the browser"
-        , recompilecmd  = "ghc -O" &= typ "COMMAND" &= help "Command to run before page generation. Default is 'ghc -O'."
+        , recompilecmd  = "ghc -O -dynamic" &= typ "COMMAND" &= help "Command to run before page generation. Default is 'ghc -O'."
         , magicname    = "a9xYf"  &= typ "VARNAME"  &= help "Magic variable name."
         , daemon       = False                      &= help "Run as a service."
         }  &= summary ("activehs " ++ showVersion version ++ ", (C) 2010-2012 Péter Diviánszky")
