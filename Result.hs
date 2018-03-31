@@ -3,13 +3,20 @@ module Result
     ( Result (..)
     , hasError
     , filterResults
+    , InferenceResult(..)
+    , TypeError(..)
     ) where
+
+import ActiveHs.Base (WrapData)
 
 import Lang
 import Data.Data.Compare
 
 import Text.XHtml.Strict
 import Control.DeepSeq
+
+import Data.Dynamic (Dynamic)
+import Data.Data (Data)
 
 ---------------------
 
@@ -78,3 +85,10 @@ searchResult :: Result -> Bool
 searchResult (SearchResults _ _) = True
 searchResult _ = False
 
+data InferenceResult
+ = DataInstance String WrapData -- type and expression
+ | Dynamic String Dynamic -- type and expression
+ | Type String String  -- type and expression
+ | Kind String String  -- kind and expression
+
+newtype TypeError = TypeError String

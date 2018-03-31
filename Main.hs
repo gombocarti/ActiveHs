@@ -126,9 +126,9 @@ exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verbosein
     eval_ ext comm
       (T.unpack -> s) 
       [env, hidden, re -> Just (is :: [([String],String)]), T.unpack -> j, T.unpack -> i, re -> Just funnames] 
-        = Just $ case comm of 
-            "eval2" -> Compare2 env funnames s
-            "check" -> Check ext sourcedirs env funnames is i j
+        = case comm of 
+            "check" -> Just $ Check ext sourcedirs env funnames is i j
+            _ -> Nothing
     eval_ _ _ _ _
         = Nothing
 

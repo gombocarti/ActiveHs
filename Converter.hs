@@ -6,7 +6,7 @@ module Converter
 
 import Parse
 
-import Smart (TaskChan, restart, interp)
+import Smart (TaskChan, restart, evaluate)
 import Result (hasError)
 import Html
 import Lang
@@ -148,7 +148,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
         mResult <- if (p == 'F' && null exp)
                      then return Nothing
                      else do
-                        result <- interp False m5 lang' ghci (exercisedir </> fn) exp Nothing
+                        result <- evaluate ghci lang' (exercisedir </> fn) exp
                         when (correct == hasError [result])
                           $ error $ translate lang' "Erroneous evaluation"  ++ ": " ++ exp ++ " ; " ++ showHtmlFragment (renderResult result)
                         return $ Just result

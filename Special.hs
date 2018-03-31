@@ -13,7 +13,7 @@ import Html
 import Qualify (qualify)
 import Hash
 
-import ActiveHs.Base (WrapData2)
+import ActiveHs.Base (WrapData2(WrapData2))
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -21,7 +21,7 @@ import           Text.XHtml.Strict ((+++))
 
 import Control.DeepSeq
 import Control.Concurrent.MVar
-import Control.Exception
+import Control.Exception (SomeException, catch)
 import System.FilePath ((</>),takeFileName)
 import System.Directory (getTemporaryDirectory)
 
@@ -48,7 +48,6 @@ timeout delay error action = do
 data SpecialTask
     = Eval
     | Compare String String
-    | Compare2 T.Text [String] String
     | Check String [FilePath] T.Text [String] [([String],String)] String String
 
 exerciseServer' 
@@ -73,26 +72,16 @@ exerciseServer' qualifier ch verbose fn sol lang m5 task = do
     timeout (10*1000000) error action
 
   where
+    eval Eval = renderResult <$> evaluate ch lang fn (T.unpack sol)
 
-    eval Eval
-        = renderResult <$> interp verbose m5 lang ch fn (T.unpack sol) Nothing
-
-    eval (Compare hiddenname goodsol)
-        = do
-            res <- interp verbose m5 lang ch fn (T.unpack sol) $ Just $ \a -> do
-                     x <- interpret (wrap2 a hiddenname) (as :: WrapData2)
-                     liftIO $ compareMistGen lang (show m5) x $ goodsol
-            return $ renderResult res
-
-    eval (Compare2 env funnames s) = do
-        fn' <- tmpSaveHs "hs" (show m5) $ env `T.append` sol
-        case qualify qualifier funnames s of
-            Left err -> return $ renderResult (Error True err)
-            Right s2 -> do
-                res <- interp verbose m5 lang ch fn' s $ Just $ \a -> do
-                         result <- interpret (wrap2 a s2) (as :: WrapData2)
-                         liftIO $ compareClearGen lang (show m5) result
-                return $ renderResult res
+    eval (Compare hiddenname goodsol) = do
+      typed <- runInterpreter ch lang fn $
+        interpret (wrapData2 (T.unpack sol) hiddenname) (as :: WrapData2)
+      case typed of
+        Success (WrapData2 typedSol typedCorrectAnswer) ->
+          renderResult <$> compareMistGen lang (show m5) typedSol typedCorrectAnswer goodsol
+        Failure err ->
+          return . renderResult $ Error False err
 
     eval (Check ext sourcedirs env funnames is i j) = do
         fn' <- tmpSaveHs ext (show m5) $ env `T.append` sol
@@ -114,10 +103,5 @@ tmpSaveHs ext x s = do
     tmpdir <- getTemporaryDirectory
     let name = "GHCiServer_" ++ x
         tmp = tmpdir </> name ++ "." ++ ext
-    T.writeFile tmp $ case ext of
-        "hs" -> s
+    T.writeFile tmp s
     return tmp
-
-
-
-

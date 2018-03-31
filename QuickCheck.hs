@@ -9,7 +9,7 @@ import Qualify (qualify)
 import Hash
 import Specialize (specialize)
 
-import Test.QuickCheck hiding (Result)
+import Test.QuickCheck hiding (Result, Success, Failure)
 import qualified Test.QuickCheck.Property as QC
 
 import Data.Char (isLower)
@@ -40,8 +40,8 @@ quickCheck qualifier m5 lang ch fn ft funnames testcases = do
             return $ Error True err
         Right s_ -> do
             logStrMsg 3 (logger ch) $ "Qualified expressions: " ++ show s_
-            interp False m5 lang ch fn "" $ Just $ \a ->
-                do  ss <- forM (testcases `zip` s_) $ \((v,s1),s2) -> do
+            inferenceResult <- runInterpreter ch lang fn $ do
+                    ss <- forM (testcases `zip` s_) $ \((v,s1),s2) -> do
                       ts1 <- typeOf s1
                       ts2 <- typeOf s2
                       let [x1,x2] = map fixType [(s1,ts1),(s2,ts2)]
@@ -49,9 +49,12 @@ quickCheck qualifier m5 lang ch fn ft funnames testcases = do
                     let ts = "[" ++ intercalate ", " ss ++ "]"
                     liftIO $ logStrMsg 3 (logger ch) $ "Test cases: " ++ ts
                     liftIO $ logStrMsg 3 (logger ch) "Before interpretation"
-                    m <- interpret ts (as :: [TestCase])
+                    tests <- interpret ts (as :: [TestCase])
                     liftIO $ logStrMsg 3 (logger ch) "After interpretation"
-                    liftIO $ qcs lang (logger ch) m
+                    return tests
+            case inferenceResult of
+              Success typedTests -> qcs lang (logger ch) typedTests
+              Failure err        -> return $ Error False err
 
   where
     fixType (s,t) =
