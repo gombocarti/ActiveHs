@@ -98,4 +98,5 @@ Executable activehs
     simple-reflect,
     mtl,
     old-locale,
-    cmdargs
+    cmdargs,
+    unordered-containers

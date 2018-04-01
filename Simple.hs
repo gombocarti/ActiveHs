@@ -22,8 +22,10 @@ import Control.Concurrent.MVar (MVar, newEmptyMVar, takeMVar, putMVar)
 import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
 import Control.Exception (SomeException)
 import qualified Control.Exception as CE
+import qualified Data.HashSet as Set
 import Control.Monad (when, forever)
 import Control.Monad.Catch (catch)
+import Data.Monoid ((<>), Endo(Endo, appEndo))
 import Data.List (isPrefixOf)
 #if !MIN_VERSION_base(4,6,0)
 import Prelude hiding (catch)
@@ -74,12 +76,28 @@ startGHCiServer paths{-searchpaths-} log = do
             return (True, Right x)
 
           `catchError_fixed` \er -> do
-            return (not $ fatal er, Left er)
+            return (not $ fatal er, Left $ eachErrorOnce er)
 
         lift $ putMVar repVar res
         when cont $ handleTask ch $ case res of
             Right _ -> Just fn
             Left  _ -> Nothing
+
+       where
+         -- Removes duplicated error messages in WontCompile.
+         -- Duplicates arise when there is a compilation error in the file to be loaded.
+         eachErrorOnce :: InterpreterError -> InterpreterError
+         eachErrorOnce (WontCompile errs) =
+           WontCompile . map GhcError . removeDuplicates $ map errMsg errs
+         eachErrorOnce err = err
+
+         removeDuplicates :: [String] -> [String]
+         removeDuplicates ss = appEndo (fst $ foldl insertIfNotOccured (mempty, Set.empty) ss) []
+           where
+             insertIfNotOccured :: (Endo [String], Set.HashSet String) -> String -> (Endo [String], Set.HashSet String)
+             insertIfNotOccured acc@(ss', occured) s
+               | Set.member s occured = acc
+               | otherwise            = (ss' <> Endo (s :), Set.insert s occured)
 
 
 restartGHCiServer :: TaskChan -> IO ()
