@@ -233,11 +233,11 @@ compareMistGen lang idi x y goodsol = do
 
 ---------------------------------
 
-compareClearGen :: Language -> String -> WrapData2 -> IO Result
-compareClearGen lang idi (WrapData2 x y)
+compareClearGen :: Data a => Language -> a -> a -> IO Result
+compareClearGen lang x y
     | D.dataTypeName (D.dataTypeOf x) == "Diagram"
     = return $ Message (translate lang "Can't decide the equality of diagrams (yet).") Nothing
-compareClearGen lang idi (WrapData2 x y) = do
+compareClearGen _lang x y = do
     (ans, a', b') <- C.compareData 0.8 0.2 700 x y
     return $ case ans of
 --        C.Yes -> []

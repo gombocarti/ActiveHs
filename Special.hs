@@ -48,6 +48,7 @@ timeout delay error action = do
 data SpecialTask
     = Eval
     | Compare String String
+    | Compare2 T.Text [String] String -- Environment (imports, type declarations), defined function names, expression to evaluate
     | Check String [FilePath] T.Text [String] [([String],String)] String String
 
 exerciseServer' 
@@ -82,6 +83,21 @@ exerciseServer' qualifier ch verbose fn sol lang m5 task = do
           renderResult <$> compareMistGen lang (show m5) typedSol typedCorrectAnswer goodsol
         Failure err ->
           return . renderResult $ Error False err
+
+    eval (Compare2 env funnames expr) = do
+        fn' <- tmpSaveHs "hs" (show m5) $ env `T.append` sol
+        renderResult <$>
+          case qualify qualifier funnames expr of
+              Left _err ->
+                evaluate ch lang fn' expr
+              Right exprForUsersSolution -> do
+                res <- runInterpreter ch lang fn' $
+                  interpret (wrapData2 expr exprForUsersSolution) (as :: WrapData2)
+                case res of
+                  Success (WrapData2 correctAnswer usersAnswer) ->
+                    compareClearGen lang correctAnswer usersAnswer
+                  Failure err ->
+                    return $ Error False err
 
     eval (Check ext sourcedirs env funnames is i j) = do
         fn' <- tmpSaveHs ext (show m5) $ env `T.append` sol

@@ -98,7 +98,7 @@ exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verbosein
     liftIO $ logStrMsg 2 (logger ch) $ " eval " ++ show md5Id ++ " " ++ params
 --  (>>= writeText)
     res <- (do
-               Just [ss, fn_, x, y, T.unpack -> lang'] <- fmap sequence $ mapM getTextParam ["c","f","x","y","lang"]
+               Just [cmd, fn_, solution, trial, T.unpack -> lang'] <- fmap sequence $ mapM getTextParam ["c","f","x","y","lang"]
 
                let fn = exercisedir </> T.unpack fn_
                    ext = case takeExtension fn of
@@ -107,8 +107,8 @@ exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verbosein
                fnExists <- liftIO $ doesFileExist fn
                if fnExists
                  then do
-                   Just task <- liftIO $ fmap (eval_ ext ss y . T.splitOn (T.pack delim)) $ T.readFile fn
-                   liftIO $ exerciseServer' ('X':magicname) ch verboseinterpreter fn x lang' md5Id task
+                   Just task <- liftIO $ fmap (eval_ ext cmd trial . T.splitOn (T.pack delim)) $ T.readFile fn
+                   liftIO $ exerciseServer' ('X':magicname) ch verboseinterpreter fn solution lang' md5Id task
                  else
                    return (inconsistencyError lang'))
            <|> return (inconsistencyError lang)
@@ -124,10 +124,12 @@ exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verbosein
     eval_ _ "eval"  _ [_, goodsol]
         = Just $ Compare magicname $ T.unpack $ T.drop (length magicname + 4) $ goodsol
     eval_ ext comm
-      (T.unpack -> s) 
-      [env, hidden, re -> Just (is :: [([String],String)]), T.unpack -> j, T.unpack -> i, re -> Just funnames] 
-        = case comm of 
-            "check" -> Just $ Check ext sourcedirs env funnames is i j
+      (T.unpack -> expr)
+      -- hidden is the solution usually
+      [env, _hidden, re -> Just (tests :: [([String],String)]), T.unpack -> j, T.unpack -> i, re -> Just funnames] 
+        = case comm of
+            "eval2" -> Just $ Compare2 env funnames expr
+            "check" -> Just $ Check ext sourcedirs env funnames tests i j
             _ -> Nothing
     eval_ _ _ _ _
         = Nothing

@@ -98,7 +98,7 @@ qc lang log (TestCase p) = do
             res :: IO Result
             res = do
                 logStrMsg 4 log $ "compare: " ++ s
-                compareClearGen lang "noId" $ WrapData2 x y
+                compareClearGen lang x y
     _ <- quickCheckWithResult (stdArgs { chatty = False }) $ {- QC.noShrinking $ -} p ff
     takeMVar v
 
