@@ -211,7 +211,7 @@ pprint d
 ------------------------
 
 wrapData2 :: String -> String -> String
-wrapData2 a b = "WrapData2 (" ++ parens a ++ "," ++ parens b ++ ")"
+wrapData2 a b = unwords ["WrapData2", parens a, parens b]
 
 ----------------
 
