@@ -5,7 +5,7 @@ module Special
     ) where
 
 import Smart
-import QuickCheck
+import Test
 import Result
 import Lang
 import Logger
@@ -95,18 +95,18 @@ exerciseServer' qualifier ch verbose fn sol lang m5 task = do
                   interpret (wrapData2 expr exprForUsersSolution) (as :: WrapData2)
                 case res of
                   Success (WrapData2 correctAnswer usersAnswer) ->
-                    compareClearGen lang correctAnswer usersAnswer
+                    fst <$> compareClearGen lang correctAnswer usersAnswer
                   Failure err ->
                     return $ Error False err
 
-    eval (Check ext sourcedirs env funnames is i j) = do
+    eval (Check ext sourcedirs env funnames testCases i j) = do
         fn' <- tmpSaveHs ext (show m5) $ env `T.append` sol
         case ext of
             "hs" -> do
-                ss <- quickCheck qualifier m5 lang ch fn' (T.unpack sol) funnames is
+                ss <- testDefinition qualifier lang ch fn' funnames testCases
                 case ss of
-                  ShowFailedTestCase testcase reason ->
-                    return . indent . renderResult $ ShowInterpreter lang 59 (getTwo "eval2" (takeFileName fn) j i j) j 'E' testcase (Just reason)
+                  ShowFailedTestCase testCase reason ->
+                    return . indent . renderResult $ ShowInterpreter lang 59 (getTwo "eval2" (takeFileName fn) j i j) j 'E' testCase (Just reason)
                   Message _ _ ->
                     return . indent $
                       renderResult ss

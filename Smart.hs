@@ -233,15 +233,15 @@ compareMistGen lang idi x y goodsol = do
 
 ---------------------------------
 
-compareClearGen :: Data a => Language -> a -> a -> IO Result
+compareClearGen :: Data a => Language -> a -> a -> IO (Result, C.Answer)
 compareClearGen lang x y
     | D.dataTypeName (D.dataTypeOf x) == "Diagram"
-    = return $ Message (translate lang "Can't decide the equality of diagrams (yet).") Nothing
+    = return $ (Message (translate lang "Can't decide the equality of diagrams (yet).") Nothing, C.Maybe 0)
 compareClearGen _lang x y = do
     (ans, a', b') <- C.compareData 0.8 0.2 700 x y
     return $ case ans of
 --        C.Yes -> []
-        _ -> showPair ans (a', b')
+        _ -> (showPair ans (a', b'), ans)
 
 
 showPair :: C.Answer -> (GenericData, GenericData) -> Result

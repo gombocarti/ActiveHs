@@ -73,7 +73,7 @@ startGHCiServer paths{-searchpaths-} log = do
             x <- m
             return (True, Right x)
 
-          `catchError_fixed` \er ->
+          `catchError_fixed` \er -> do
             return (not $ fatal er, Left er)
 
         lift $ putMVar repVar res

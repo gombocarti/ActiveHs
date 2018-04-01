@@ -60,7 +60,7 @@ Executable activehs
     HoogleCustom,
     Html,
     Logger,
-    QuickCheck,
+    Test,
     Snap,
     Special
 
@@ -72,7 +72,6 @@ Executable activehs
     dia-functions,
     data-pprint,
     base,
-    QuickCheck,
     array,
     directory,
     containers,
