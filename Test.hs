@@ -34,14 +34,14 @@ testDefinition qualifier lang ch fn funnames testCases' = do
         Left err -> do
             logStrMsg 3 (logger ch) $ "Error in qualification: " ++ err
             return $ Error True err
-        Right testsForUserCode -> do
-            logStrMsg 3 (logger ch) $ "Qualified expressions: " ++ show testsForUserCode
+        Right expectedResults -> do
+            logStrMsg 3 (logger ch) $ "Qualified expressions: " ++ show expectedResults
             inferenceResult <- runInterpreter ch lang fn $ do
-                    tests <- forM (testCases `zip` testsForUserCode) $ \(forSolution, forUserCode) -> do
-                      tUser <- typeOf forUserCode
-                      tSol <- typeOf forSolution
-                      let [userFixed,solFixed] = map fixType [(forUserCode,tUser), (forSolution,tSol)]
-                      return $ wrapData2 userFixed solFixed
+                    tests <- forM (testCases `zip` expectedResults) $ \(actual, expected) -> do
+                      tActual <- typeOf actual
+                      tExpected <- typeOf expected
+                      let [actualFixed, expectedFixed] = map fixType [(actual,tActual), (expected,tExpected)]
+                      return $ wrapData2 actualFixed expectedFixed
                     let testSuiteCode = "[" ++ intercalate ", " tests ++ "]"
                     liftIO $ logStrMsg 3 (logger ch) $ "Test cases: " ++ testSuiteCode
                     interpret testSuiteCode (as :: [WrapData2])
@@ -65,8 +65,8 @@ test lang testSuite = foldM testsPassed (runTest lang) testSuite
 -- Nothing means test is passed.
 -- Just result means test is failed and result holds the test case and reason.
 runTest :: Language -> (WrapData2, String) -> IO (Maybe Result)
-runTest lang ((WrapData2 exprForUserCode exprForSolution), testCase) =
-  toTestResult <$> compareClearGen lang exprForUserCode exprForSolution
+runTest lang ((WrapData2 actual expected), testCase) =
+  toTestResult <$> compareClearGen lang actual expected
 
   where
     toTestResult :: (Result, C.Answer) -> Maybe Result
