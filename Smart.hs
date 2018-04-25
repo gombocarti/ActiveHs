@@ -56,9 +56,9 @@ data TaskChan
         , chan      :: Simple.TaskChan
         }
 
-startGHCiServer :: [FilePath] -> Logger -> Maybe FilePath -> IO TaskChan
-startGHCiServer searchpaths log dbname = do
-    ch <- Simple.startGHCiServer searchpaths log
+startGHCiServer :: [FilePath] -> Logger -> Maybe FilePath -> Int -> IO TaskChan
+startGHCiServer searchpaths log dbname reloadsPerGhciSession = do
+    ch <- Simple.startGHCiServer searchpaths log reloadsPerGhciSession
     return $ TC
             { logger    = log
             , chan      = ch

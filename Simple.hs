@@ -41,32 +41,34 @@ newtype TaskChan
 
 ---------------
 
-startGHCiServer :: [String] -> Logger -> IO TaskChan
-startGHCiServer paths{-searchpaths-} log = do
+startGHCiServer :: [String] -> Logger -> Int -> IO TaskChan
+startGHCiServer paths log resetsPerRuns = do
     ch <- newChan 
 
     _ <- forkIO $ forever $ do
         logStrMsg 1 log "start interpreter"
-        e <- runInterpreter (handleTask ch Nothing)
-              `CE.catch` \(e :: SomeException) ->
-                return $ Left $ UnknownError $ "GHCi server died: " ++ show e
-        case e of
+        result <- runInterpreter (getTask ch Nothing resetsPerRuns)
+                   `CE.catch` \(e :: SomeException) ->
+                     return $ Left $ UnknownError $ "GHCi server died: " ++ show e
+        case result of
             Left  e  -> logStrMsg 0 log $ "stop interpreter: " ++ show e
             Right () -> return ()
 
     return $ TC ch
 
   where
-    handleTask :: Chan (Maybe Task) -> Maybe FilePath -> Interpreter ()
-    handleTask ch oldFn = do
+    getTask :: Chan (Maybe Task) -> Maybe FilePath -> Int -> Interpreter ()
+    getTask ch oldFn resetsLeft = do
         task <- lift $ readChan ch
         case task of
-            Just task -> handleTask_ ch oldFn task
+            Just task -> handleTask ch oldFn task resetsLeft
             Nothing   -> liftIO $ logStrMsg 0 log "interpreter stopped intentionally"
 
-    handleTask_ ch oldFn (Task fn repVar m) = do
-        (cont, res) <- do  
-            when (oldFn /= Just fn) $ do
+    handleTask ch oldFn (Task fn repVar m) resetsLeft = do
+        let resetNeeded = oldFn /= Just fn
+            resetsLeft' = if resetNeeded then resetsLeft - 1 else resetsLeft
+        (cont, res) <- do
+            when resetNeeded $ do
                 reset
                 set [searchPath := paths]
                 set [languageExtensions := [ExtendedDefaultRules]]
@@ -79,9 +81,10 @@ startGHCiServer paths{-searchpaths-} log = do
             return (not $ fatal er, Left $ eachErrorOnce er)
 
         lift $ putMVar repVar res
-        when cont $ handleTask ch $ case res of
-            Right _ -> Just fn
-            Left  _ -> Nothing
+        let newFn = case res of
+              Right _ -> Just fn
+              Left  _ -> Nothing
+        when (cont && resetsLeft' > 0) $ getTask ch newFn resetsLeft'
 
        where
          -- Removes duplicated error messages in WontCompile.

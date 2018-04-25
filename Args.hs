@@ -35,6 +35,7 @@ data Args
         , recompilecmd  :: String
         , magicname     :: String
         , daemon        :: Bool
+        , reloadsPerGhciSession :: Int
         }
         deriving (Show, Data, Typeable)
 
@@ -62,6 +63,7 @@ myargs dataDir = Args
         , recompilecmd  = "ghc -O -dynamic" &= typ "COMMAND" &= help "Command to run before page generation. Default is 'ghc -O'."
         , magicname    = "a9xYf"  &= typ "VARNAME"  &= help "Magic variable name."
         , daemon       = False                      &= help "Run as a service."
+        , reloadsPerGhciSession = 15                        &= help "Number of file reloads per ghci restarts."
         }  &= summary ("activehs " ++ showVersion version ++ ", (C) 2010-2012 Péter Diviánszky")
            &= program "activehs"
 

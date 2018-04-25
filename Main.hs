@@ -38,12 +38,12 @@ main :: IO ()
 main = getArgs >>= mainWithArgs
 
 mainWithArgs :: Args -> IO ()
-mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, staticdir, publicdir, gendir, mainpage, restartpath, sourcedir, includedir, daemon}) = do 
+mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, staticdir, publicdir, gendir, mainpage, restartpath, sourcedir, includedir, daemon, reloadsPerGhciSession}) = do 
 
     log <- newLogger verbose $ 
         logdir </> "interpreter.log"
 
-    ch <- startGHCiServer [sourcedir] log hoogledb
+    ch <- startGHCiServer [sourcedir] log hoogledb reloadsPerGhciSession
 
     logStrMsg 2 log ("lang: " ++ lang args)
 
