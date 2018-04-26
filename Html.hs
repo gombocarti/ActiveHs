@@ -64,12 +64,10 @@ a |-| b = a +++ br +++ b
 showCode :: String -> String -> Html
 showCode c x 
     | isNoHtml x'   = x'
-    | null c        = f $ thecode << x'
-    | otherwise     = f $ thecode ! [theclass c] << x'
+    | null c        = thecode << x'
+    | otherwise     = thecode ! [theclass c] << x'
   where
     x' = toHtml x
-    f y | elem '\n' x = pre ! [theclass "normal"] << y
-        | otherwise   = y
 
 showCode_ :: String -> String -> Html
 showCode_ c x 

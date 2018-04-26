@@ -96,16 +96,14 @@ h1, h2, h3 {
   font-weight: bold;
 }
 
-pre code, textarea, div.string {
+pre code, textarea, div.string, code, .error, input {
   font-family: monospace;
-  font-size: 130%;
+  white-space: pre;
 }
 
-pre.normal, pre.normal code, code, .error, input {
+pre.normal, pre.normal code {
   font-family: sans-serif;
-  font-size: 100%;
 }
-
 
 .wait {
   font-style: italic;

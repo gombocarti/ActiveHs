@@ -158,7 +158,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
             else let toShow = if p `elem` ['F', 'R']
                                 then Nothing
                                 else mResult
-                 in [rawHtml $ showHtmlFragment $ showInterpreter lang' 60 act i p exp toShow]
+                 in [rawHtml $ showHtmlFragment $ showInterpreter lang' 80 act i p exp toShow]
 
     processBlock _ (Text (CodeBlock ("",[t],[]) l)) 
         | t `elem` ["dot","neato","twopi","circo","fdp","dfdp","latex"] = do
