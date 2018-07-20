@@ -3,6 +3,7 @@ FROM debian:stable-slim
 # Install stack dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+      netbase \
       curl \
       ca-certificates \
       g++ \
@@ -17,16 +18,19 @@ RUN apt-get update && \
       zlib1g-dev
 
 # Install stack
-RUN curl -L https://github.com/commercialhaskell/stack/releases/download/v1.6.3/stack-1.6.3-linux-x86_64-static.tar.gz -o /usr/local/bin/stack.tar.gz && \
-    tar xf /usr/local/bin/stack.tar.gz -C /usr/local/bin --strip-components=1 stack-1.6.3-linux-x86_64-static/stack && \
+RUN curl -L https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-linux-x86_64.tar.gz -o /usr/local/bin/stack.tar.gz && \
+    tar xf /usr/local/bin/stack.tar.gz -C /usr/local/bin --strip-components=1 stack-1.7.1-linux-x86_64/stack && \
     chmod +x /usr/local/bin/stack
 
 # Install extra libraries for ActiveHs dependencies
+# libtinfo-dev  for hint
+# libpcre3-dev  for pcre-light
+# pkg-config    for pcre-light
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      libtinfo-dev # for hint
-      libpcre3-dev # for pcre-light
-      pkg-config   # for pcre-light
+      libtinfo-dev \
+      libpcre3-dev \
+      pkg-config
 
 # Build ActiveHs dependencies
 COPY activehs.cabal stack.yaml /development/init/
