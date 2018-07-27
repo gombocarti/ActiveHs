@@ -6,7 +6,6 @@ import Lang
 import Result
 import Logger
 import Qualify (qualify)
-import Hash
 import Specialize (specialize)
 
 import qualified Data.Data.Compare as C

@@ -1,4 +1,5 @@
-{-# LANGUAGE ViewPatterns, PatternGuards #-}
+{-# LANGUAGE ViewPatterns, PatternGuards, TypeApplications, RankNTypes,
+             ScopedTypeVariables #-}
 module Smart
     ( module Simple
     , startGHCiServer
@@ -14,16 +15,14 @@ module Smart
     , wrapData2
     ) where
 
-import HoogleCustom
 import Specialize
 import Lang
 import Result
 import Logger
 import Simple hiding (TaskChan, startGHCiServer)
 import qualified Simple
-import Hash
 
-import ActiveHs.Base (WrapData2 (..), WrapData(..))
+import ActiveHs.Base (WrapData(..))
 import Graphics.Diagrams (Diagram)
 import Graphics.Diagrams.SVG (render)
 import Graphics.Diagrams.FunctionGraphs (displayFun, displayDiscreteFun, displayArc)
@@ -37,12 +36,7 @@ import Data.Data.GenRep.Doc (valueToDoc)
 import Data.Dynamic (Dynamic, fromDynamic, toDyn)
 import Data.Data (Data)
 import qualified Data.Data as D
-import Control.DeepSeq (force)
-import Control.Monad (void)
-import qualified Control.Monad.Catch as MC
-import Control.Monad.Trans (liftIO)
 import Data.Char (isAlpha)
-import Data.Maybe (catMaybes, maybe)
 
 ----------------------------------------------------------------------
 
@@ -50,8 +44,8 @@ data Inferred a
   = Success a
   | Failure String
 
-data TaskChan 
-    = TC 
+data TaskChan
+    = TC
         { logger    :: Logger
         , chan      :: Simple.TaskChan
         }
@@ -83,7 +77,7 @@ runInterpreter ch lang fn action =
   either (Failure . showErr lang) Success <$> sendToServer (chan ch) fn action
 
 getCommand :: String -> (String, String)
-getCommand (':':'?': (dropSpace -> Just x)) 
+getCommand (':':'?': (dropSpace -> Just x))
     = ("?", x)
 getCommand (':': (span isAlpha -> (c@(_:_), dropSpace -> Just x)))
     = (c, x)
@@ -141,7 +135,8 @@ infer lang ch fn s@(getCommand -> (cmd, expr))
                    `catchE`
                    (return . Left . TypeError . showErr lang)
                   )
-        else return $ Left $ TypeError $ 
+              _ -> error "Smart.infer: impossible"
+        else return $ Left $ TypeError $
                translate lang "The" ++ " :" ++ cmd ++ " " ++ translate lang "command is not supported" ++ "."
 
  where
@@ -190,23 +185,23 @@ pprint d
     | Just x <- fromDynamic d = ff x
     | Just x <- fromDynamic d = ff $ showFunc (x :: Double -> Double)
     | Just x <- fromDynamic d = ff $ showFunc (x :: Double -> Integer)
-    | Just x <- fromDynamic d = ff $ showFunc $ fromIntegral . fromEnum . (x :: Double -> Bool)
-    | Just x <- fromDynamic d = ff $ showFunc $ fromIntegral . fromEnum . (x :: Double -> Ordering)
+    | Just x <- fromDynamic d = ff $ showFunc @Integer $ fromIntegral . fromEnum . (x :: Double -> Bool)
+    | Just x <- fromDynamic d = ff $ showFunc @Integer $ fromIntegral . fromEnum . (x :: Double -> Ordering)
     | Just x <- fromDynamic d = ff $ showFunc_ (x :: Integer -> Double)
     | Just x <- fromDynamic d = ff $ showFunc_ (x :: Integer -> Integer)
-    | Just x <- fromDynamic d = ff $ showFunc_ $ fromIntegral . fromEnum . (x :: Integer -> Bool)
-    | Just x <- fromDynamic d = ff $ showFunc_ $ fromIntegral . fromEnum . (x :: Integer -> Ordering)
+    | Just x <- fromDynamic d = ff $ showFunc_ @Integer $ fromIntegral . fromEnum . (x :: Integer -> Bool)
+    | Just x <- fromDynamic d = ff $ showFunc_ @Integer $ fromIntegral . fromEnum . (x :: Integer -> Ordering)
     | Just x <- fromDynamic d = ff $ displayArc' (x :: Double -> (Double, Double))
     | Just (f,g) <- fromDynamic d = ff $ displayArc' ((\x -> (f x, g x)) :: Double -> (Double, Double))
     | otherwise = return Nothing
  where
     ff = fmap g . render 10 (-16, -10) (16, 10) 5 2048 ""
     g (htm, err) = Just (Dia htm err)
-    showFunc :: (RealFrac a, Real b) => (a -> b) -> Diagram
+    showFunc :: forall b a. (RealFrac a, Real b) => (a -> b) -> Diagram
     showFunc = displayFun (-16,-10) (16,10)
-    showFunc_ :: (Real b, Integral a) => (a -> b) -> Diagram
+    showFunc_ :: forall b a. (Real b, Integral a) => (a -> b) -> Diagram
     showFunc_ = displayDiscreteFun (-16,-10) (16,10)
-    displayArc' = displayArc (-16,-10) (16,10) (0,1) 
+    displayArc' = displayArc (-16,-10) (16,10) (0,1)
 
 ------------------------
 
@@ -217,7 +212,7 @@ wrapData2 a b = unwords ["WrapData2", parens a, parens b]
 
 compareMistGen :: Data a => Language -> String -> a -> a -> String -> IO Result
 compareMistGen lang idi x y goodsol
-    | D.dataTypeName (D.dataTypeOf x) == "Diagram" 
+    | D.dataTypeName (D.dataTypeOf x) == "Diagram"
     = return $ Message (translate lang "Can't decide the equality of diagrams (yet).") Nothing
 compareMistGen lang idi x y goodsol = do
     (ans, a', b') <- C.compareData 0.8 0.2 700 x y
@@ -228,6 +223,7 @@ compareMistGen lang idi x y goodsol = do
             let x = case ans of
                     C.Maybe _  -> "I cannot decide whether this is a good solution:"
                     C.No       -> "Wrong solution:"
+                    _          -> error "Smart.compareMistGen: impossible"
             in Message (translate lang x) $ Just $ showPair ans (a', mistify b')
 
 

@@ -1,7 +1,8 @@
-{-# LANGUAGE RelaxedPolyRec, PatternGuards, ViewPatterns #-}
-{-# LANGUAGE ExistentialQuantification #-}
 
-module Parse 
+{-# LANGUAGE ExistentialQuantification, RelaxedPolyRec, PatternGuards,
+             ViewPatterns #-}
+
+module Parse
     ( ParseMode (..)
     , Module (..)
     , Doc (..)
@@ -26,7 +27,6 @@ import Data.List (tails, partition, groupBy)
 import Data.Function (on)
 import Data.Char (isAlpha, isSpace, toUpper, isUpper)
 import Control.Monad (zipWithM)
-import qualified Data.Set as Set
 
 --------------------------------- data structures
 
@@ -84,25 +84,25 @@ mainParse mode s = do
         parseModule HaskellMode m = case HPar.parseModuleWithMode HPar.defaultParseMode m of
             (HPar.ParseOk m) -> return $ HaskellModule m
             parseError       -> fail $ "parseHeader: " ++ show parseError
-        
+
         preprocess (c:'>':' ':l) | c `elem` commandList
             = ["~~~~~ {." ++ [c] ++ "}", dropWhile (==' ') l, "~~~~~", ""]
-        preprocess ('|':l) 
+        preprocess ('|':l)
             = []
         -- drop lines ending with "--"
         preprocess l | take 3 (dropWhile (==' ') $ reverse l) == "-- " = []
                      | otherwise = [l]
-        
+
         pState = def
             { readerStandalone = True
             , readerExtensions = enableExtension Ext_literate_haskell $ pandocExtensions
             }
-        
+
         interpreter :: BBlock -> BBlock
-        interpreter (Text (CodeBlock ("",[[x]],[]) e)) | x `elem` commandList 
+        interpreter (Text (CodeBlock ("",[[x]],[]) e)) | x `elem` commandList
             = OneLineExercise (toUpper x) (isUpper x) e
         interpreter a = a
-        
+
 ------------------------------
 
 collectTests :: ParseMode -> [BBlock] -> IO [BBlock]
@@ -170,7 +170,7 @@ parts = groupBy (const id `on` isIndented) . lines  where
 ------------------------------
 
 getCommand :: String -> (String, String)
-getCommand (':':'?': (dropSpace -> Just x)) 
+getCommand (':':'?': (dropSpace -> Just x))
     = ("?", x)
 getCommand (':': (span isAlpha -> (c@(_:_), dropSpace -> Just x)))
     = (c, x)

@@ -23,12 +23,11 @@ import qualified Language.Haskell.Exts.Syntax as HSyn
 import Text.XHtml.Strict hiding (lang)
 import Text.Pandoc hiding (getModificationTime)
 
-import System.Process (readProcessWithExitCode)
-import System.Cmd
+import System.Process
 import System.FilePath
 import System.Exit
 import System.Directory as Dir (getTemporaryDirectory, getModificationTime, doesFileExist, getTemporaryDirectory, createDirectoryIfMissing)
---import Data.Time (diffUTCTime) 
+--import Data.Time (diffUTCTime)
 
 import Control.Monad
 import Data.List
@@ -78,7 +77,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
  where
     ext = case mode of
         HaskellMode -> "hs"
-    
+
     lang' = case span (/= '_') . reverse $ what of
         (l, "")                -> lang
         (l, _) | length l > 2  -> lang
@@ -102,10 +101,10 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
 
     importsHiding funnames = case modu of
         HaskellModule (HSyn.Module loc (Just (HSyn.ModuleHead _ modname _ _)) directives imps _) ->
-            HPty.prettyPrint $ 
+            HPty.prettyPrint $
               HSyn.Module loc Nothing directives
                 ([mkImport modname funnames, mkImport_ ('X':magicname) modname] ++ imps) []
---        _ -> error "error in Converter.extract"
+        _ -> error "Converter.extract: impossible"
 
     mkCodeBlock l =
         [ CodeBlock ("", ["haskell"], []) $ intercalate "\n" l | not $ null l ]
@@ -127,7 +126,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
             j = "_j" ++ i
             fn = what ++ "_" ++ i <.> ext
             (static_, inForm, rows) = if null hidden
-                then ([], visi, length visi) 
+                then ([], visi, length visi)
                 else (visi, [], 2 + length hidden)
 
         writeEx fn  [ showEnv mode $ importsHiding funnames ++ "\n" ++ unlines static_
@@ -160,7 +159,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
                                 else mResult
                  in [rawHtml $ showHtmlFragment $ showInterpreter lang' 80 act i p exp toShow]
 
-    processBlock _ (Text (CodeBlock ("",[t],[]) l)) 
+    processBlock _ (Text (CodeBlock ("",[t],[]) l))
         | t `elem` ["dot","neato","twopi","circo","fdp","dfdp","latex"] = do
             tmpdir <- getTemporaryDirectory
             let i = show $ mkHash $ t ++ l
@@ -170,7 +169,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
                 tmpfile = tmpdir </> takeFileName fn <.> if t=="latex" then "tex" else t
 
             writeFile' tmpfile $ T.pack $ unlines $ case t of
-                "latex" -> 
+                "latex" ->
                     [ "\\documentclass{article}"
                     , "\\usepackage{ucs}"
                     , "\\usepackage[utf8x]{inputenc}"
@@ -192,7 +191,7 @@ extract mode verbose ghci (Args {lang, templatedir, sourcedir, exercisedir, gend
                             , replaceExtension tmpfile "dvi", "2>&1 >/dev/null",")"]
                 _       ->  [ t, "-Tpng", "-o", outfile, tmpfile, "2>&1 >/dev/null" ]
 
-            if x == ExitSuccess 
+            if x == ExitSuccess
                 then return [Para [Image ("", [], []) [Str imgname] (imgname, "")]]
                 else fail $ "processDot " ++ tmpfile ++ "; " ++ show x
 
@@ -206,7 +205,7 @@ preprocessForSlides :: [BBlock] -> [BBlock]
 preprocessForSlides x = case span (not . isLim) x of
     (a, []) -> a
     (a, b) -> a ++ case span (not . isHeader) b of
-        (c, d) -> [Text $ rawHtml "<div class=\"handout\">"] ++ c 
+        (c, d) -> [Text $ rawHtml "<div class=\"handout\">"] ++ c
                ++ [Text $ rawHtml "</div>"] ++ preprocessForSlides d
  where
     isLim (Text HorizontalRule) = True
@@ -227,7 +226,7 @@ showBlockSimple lang fn i rows_ cont = (:[]) $ rawHtml $ showHtmlFragment $ inde
     ! [ theclass $ if null cont then "interpreter" else "resetinterpreter"
       , action $ getOne "check" fn i i
       ]
-    <<[ textarea 
+    <<[ textarea
         ! [ cols "80"
           , rows $ show rows_
           , identifier $ "tarea" ++ i
@@ -248,7 +247,7 @@ showEnv HaskellMode prelude
     ++ "\n{-# LINE 1 \"input\" #-}\n"
 
 mkImport :: HSyn.ModuleName HLoc.SrcSpanInfo -> [Name] -> HSyn.ImportDecl HLoc.SrcSpanInfo
-mkImport m d 
+mkImport m d
     = HSyn.ImportDecl
         { HSyn.importAnn = HLoc.noSrcSpan
         , HSyn.importModule = m
@@ -266,7 +265,7 @@ mkName n@(c:_)
 mkName n       = HSyn.Symbol HLoc.noSrcSpan n
 
 mkImport_ :: String -> HSyn.ModuleName HLoc.SrcSpanInfo -> HSyn.ImportDecl HLoc.SrcSpanInfo
-mkImport_ magic m 
+mkImport_ magic m
     = (mkImport m []) { HSyn.importQualified = True, HSyn.importAs = Just $ HSyn.ModuleName HLoc.noSrcSpan magic }
 
 ------------------
@@ -286,6 +285,3 @@ whenOutOfDate def x src m = do
 
 
 --------------------
-
-
-

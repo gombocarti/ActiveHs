@@ -1,4 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables, OverloadedStrings, ViewPatterns, PatternGuards, NamedFieldPuns, CPP #-}
+{-# LANGUAGE ScopedTypeVariables, OverloadedStrings, ViewPatterns,
+             PatternGuards, NamedFieldPuns, CPP #-}
 
 module Special
     ( SpecialTask (..), exerciseServer'
@@ -19,14 +20,12 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Text.XHtml.Strict ((+++))
 
-import Control.DeepSeq
 import Control.Concurrent.MVar
 import Control.Exception (SomeException, catch)
 import System.FilePath ((</>),takeFileName)
 import System.Directory (getTemporaryDirectory)
 
 import Control.Concurrent (threadDelay, forkIO, killThread)
-import Control.Monad.Trans (liftIO)
 #if !MIN_VERSION_base(4,6,0)
 import Prelude hiding (catch)
 #endif
@@ -35,7 +34,7 @@ import Prelude hiding (catch)
 
 timeout :: forall b. Int -> IO b -> IO b -> IO b
 timeout delay error action = do
-    v <- newEmptyMVar 
+    v <- newEmptyMVar
     t1 <- forkIO $ threadDelay delay >> error >>= putMVar v
     t2 <- forkIO $ action >>= putMVar v
     x <- takeMVar v
@@ -51,7 +50,7 @@ data SpecialTask
     | Compare2 T.Text [String] String -- Environment (imports, type declarations), defined function names, expression to evaluate
     | Check String [FilePath] T.Text [String] [([String],String)] String String
 
-exerciseServer' 
+exerciseServer'
     :: String
     -> TaskChan
     -> Bool
@@ -113,6 +112,7 @@ exerciseServer' qualifier ch verbose fn sol lang m5 task = do
                       +++ (renderResult (ShowInterpreter lang 59 (getTwo "eval2" (takeFileName fn) j i j) j 'E' "" Nothing))
                   _ ->
                     return . indent $ renderResult ss
+            _ -> error "Special.exerciseServer': impossible"
 
 tmpSaveHs :: String -> String -> T.Text -> IO FilePath
 tmpSaveHs ext x s = do
