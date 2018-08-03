@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-module ActiveHs.Specialize 
+module ActiveHs.Specialize
     ( specialize
     ) where
 
@@ -24,7 +24,7 @@ specialize a
             in Right (prettyPrint t', prettyPrint t'')
 
 split :: Type a -> ([(String, [String])], Type a)
-split (TyForall a Nothing (Just l) t) 
+split (TyForall a Nothing (Just l) t)
     = ( map (\x -> (fst (head x), map snd x)) $ groupBy ((==) `on` fst) $ sort $
           let assertions = case l of
                           CxSingle _ (asst) -> [asst]
@@ -33,7 +33,7 @@ split (TyForall a Nothing (Just l) t)
           in [(v,s) | ClassA _ (UnQual _ (Ident _ s)) [TyVar _ (Ident _ v)] <- assertions]
       , t
       )
-split t 
+split t
     = ([], t)
 
 convert :: ([(String, [String])], Type a) -> (Type a, Type a)
@@ -67,5 +67,3 @@ res x | x `elem` ["Integral"] = ["Integer"]
 res x | x `elem` ["Monad"] = ["[]","Maybe"]
 res x | x `elem` ["Ord","Show","Eq","Enum"] = allT
 res x = []  -- !!!
-
-
