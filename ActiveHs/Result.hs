@@ -4,10 +4,10 @@ module ActiveHs.Result (
     , isError
     ) where
 
-import           Data.Data.Compare
+import           Data.Data.Compare (Answer)
 import qualified Data.Text as T
 
-import           Control.DeepSeq
+import           Control.DeepSeq (NFData(rnf))
 
 ---------------------
 
@@ -29,16 +29,19 @@ data Result
     | TestsFailed T.Text Result
 
 instance NFData Result where
-    rnf (ExprType expr type_) = rnf (expr, type_)
-    rnf (TypeKind type_ kind) = rnf (type_, kind)
-    rnf (Comparison a x b) = rnf (a,x,b)
+    rnf (ExprType expr type_) = rnf expr `seq` rnf type_
+    rnf (TypeKind type_ kind) = rnf type_ `seq` rnf kind
+    rnf (Comparison a x b) = rnf a `seq` rnf x `seq` rnf b
     rnf (SearchResults l) = rnf l
-    
+
     rnf (Message msg) = rnf msg
-    rnf (Error general details_) = rnf (general, details_)
+    rnf (Error general details_) = rnf general `seq` rnf details_
     rnf (Dia html) = rnf html
     rnf TestsPassed = ()
-    rnf (TestsFailed test result) = rnf (test, result)
+    rnf (TestsFailed test result) = rnf test `seq` rnf result
+    rnf GoodSolution              = ()
+    rnf (CantDecideSolution a b)  = rnf a `seq` rnf b
+    rnf (WrongSolution a b)       = rnf a `seq` rnf b
 
 {-
 errors :: Result -> Bool

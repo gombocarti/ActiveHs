@@ -1,16 +1,16 @@
 {-# LANGUAGE DeriveDataTypeable, NamedFieldPuns #-}
 module ActiveHs.Args where
 
-import Paths_activehs
+import Paths_activehs (version)
 
 import Control.Monad (when)
 import System.Directory (createDirectoryIfMissing)
 import System.Console.CmdArgs.Implicit
-import System.FilePath
+  (Data, Typeable, (&=), typDir, help, typFile, typ, summary, program, cmdArgs)
 
 import ActiveHs.Translation.Base (Language(En))
 
-import Data.Version
+import Data.Version (showVersion)
 
 ------------------
 
@@ -54,7 +54,7 @@ defaultArgs = Args
            &= program "activehs"
 
 createDirs :: Args -> IO ()
-createDirs (Args {sourceDir, genDir, exerciseDir, logDir}) 
+createDirs (Args {sourceDir, genDir, exerciseDir, logDir})
     = mapM_ mkDir [sourceDir, genDir, exerciseDir, logDir]
  where
     mkDir path = when (not . null $ path) $
@@ -66,6 +66,3 @@ getArgs = do
     args <- cmdArgs defaultArgs
     createDirs args
     return args
-
-
-
