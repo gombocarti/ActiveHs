@@ -1,9 +1,9 @@
-{-# LANGUAGE OverloadedStrings, ViewPatterns, NamedFieldPuns #-}
-{-# LANGUAGE ScopedTypeVariables, OverloadedStrings, ViewPatterns, PatternGuards, NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings, ViewPatterns, NamedFieldPuns,
+             ScopedTypeVariables, PatternGuards #-}
 
 module Main where
 
-import Smart hiding (hoogledb)
+import Smart
 import Converter
 import Args
 import Special
@@ -25,11 +25,10 @@ import qualified Data.Text.IO as T
 import System.FilePath ((</>), takeExtension, dropExtension)
 import System.Directory (doesFileExist)
 import System.IO (hSetBuffering, stdin, BufferMode(NoBuffering))
-import Control.Concurrent (threadDelay, forkIO, killThread)
+import Control.Concurrent (forkIO, killThread)
 import Control.Monad (when)
 import Control.Monad.Trans (liftIO)
 import Control.Applicative ((<|>))
-import Data.Time (getCurrentTime, diffUTCTime)
 import Data.Maybe (listToMaybe)
 
 ---------------------------------------------------------------
@@ -38,9 +37,9 @@ main :: IO ()
 main = getArgs >>= mainWithArgs
 
 mainWithArgs :: Args -> IO ()
-mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, staticdir, publicdir, gendir, mainpage, restartpath, sourcedir, includedir, daemon, reloadsPerGhciSession}) = do 
+mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, staticdir, publicdir, gendir, mainpage, restartpath, sourcedir, includedir, daemon, reloadsPerGhciSession}) = do
 
-    log <- newLogger verbose $ 
+    log <- newLogger verbose $
         logdir </> "interpreter.log"
 
     ch <- startGHCiServer [sourcedir] log hoogledb reloadsPerGhciSession
@@ -126,7 +125,7 @@ exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verbosein
     eval_ ext comm
       (T.unpack -> expr)
       -- hidden is the solution usually
-      [env, _hidden, re -> Just (tests :: [([String],String)]), T.unpack -> j, T.unpack -> i, re -> Just funnames] 
+      [env, _hidden, re -> Just (tests :: [([String],String)]), T.unpack -> j, T.unpack -> i, re -> Just funnames]
         = case comm of
             "eval2" -> Just $ Compare2 env funnames expr
             "check" -> Just $ Check ext sourcedirs env funnames tests i j
@@ -135,9 +134,7 @@ exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verbosein
         = Nothing
 
 maybeRead :: Read a => String -> Maybe a
-maybeRead s = listToMaybe [a | (a,"") <- reads s] 
+maybeRead s = listToMaybe [a | (a,"") <- reads s]
 
 re :: Read b => T.Text -> Maybe b
 re = maybeRead . T.unpack
-
-

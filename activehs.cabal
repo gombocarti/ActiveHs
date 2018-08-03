@@ -24,9 +24,9 @@ cabal-version:       >=1.6
 build-type:          Simple
 
 data-files:
-    copy/*.css, 
-    copy/*.js, 
-    copy/icon.ico, 
+    copy/*.css,
+    copy/*.js,
+    copy/icon.ico,
     template/*.template,
     doc/UsersGuide_en.lhs,
     doc/DevDoc_en.lhs,
@@ -42,8 +42,9 @@ source-repository this
   tag: 0.3.2
 
 Executable activehs
-  GHC-Options: -threaded -rtsopts -with-rtsopts=-N2 -Wall -fwarn-tabs -fwarn-monomorphism-restriction -fwarn-missing-import-lists
-  Main-is: 
+  GHC-Options: -threaded -rtsopts -with-rtsopts=-N2 -Wall -Wno-unused-matches
+               -Wno-unused-binds -Wno-name-shadowing
+  Main-is:
     Main.hs
   Other-modules:
     Paths_activehs,

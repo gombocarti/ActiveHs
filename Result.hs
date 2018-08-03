@@ -16,14 +16,13 @@ import Text.XHtml.Strict
 import Control.DeepSeq
 
 import Data.Dynamic (Dynamic)
-import Data.Data (Data)
 
 ---------------------
 
 type Err = (String, String)
 
 data Result
-    = ExprType Bool String String [Err]        
+    = ExprType Bool String String [Err]
             -- expression with type and error messages
             -- True: this is an error (can't do better just show the type)
     | TypeKind String String [Err]        -- type with kind and error messages

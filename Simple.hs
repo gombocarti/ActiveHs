@@ -1,4 +1,5 @@
-{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, PatternGuards, FlexibleContexts, CPP #-}
+{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables,
+             PatternGuards, FlexibleContexts, CPP #-}
 
 module Simple
     ( Task (..), TaskChan
@@ -33,17 +34,17 @@ import Prelude hiding (catch)
 
 -------------------------
 
-data Task 
+data Task
     = forall a. Task FilePath (MVar (Either InterpreterError a)) (Interpreter a)
 
-newtype TaskChan 
+newtype TaskChan
     = TC (Chan (Maybe Task))
 
 ---------------
 
 startGHCiServer :: [String] -> Logger -> Int -> IO TaskChan
 startGHCiServer paths log resetsPerRuns = do
-    ch <- newChan 
+    ch <- newChan
 
     _ <- forkIO $ forever $ do
         logStrMsg 1 log "start interpreter"
@@ -122,7 +123,7 @@ catchError_fixed
     => m a -> (InterpreterError -> m a) -> m a
 m `catchError_fixed` f = m `catch` (f . fixError)
   where
-    fixError (UnknownError s) 
+    fixError (UnknownError s)
         | Just x <- dropPrefix "GHC returned a result but said: [GhcError {errMsg =" s
         = WontCompile [GhcError {errMsg = case reads x of ((y,_):_) -> y; _ -> s}]
     fixError x = x
@@ -131,6 +132,3 @@ dropPrefix :: Eq a => [a] -> [a] -> Maybe [a]
 dropPrefix s m
     | s `isPrefixOf` m = Just $ drop (length s) m
     | otherwise = Nothing
-
-
-
