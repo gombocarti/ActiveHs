@@ -1,22 +1,34 @@
 {-# LANGUAGE FlexibleInstances #-}
+
 module ActiveHs.Specialize
     ( specialize
     ) where
 
-import Data.List
-import Data.Function
+import Data.List (groupBy, sort, intersect)
+import Data.Function (on)
 
 import Language.Haskell.Exts.Parser
-import Language.Haskell.Exts.Pretty
+  (extensions, ParseResult(ParseFailed, ParseOk), parseTypeWithMode,
+   defaultParseMode)
+
+import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.Syntax
+  (Type(TyForall, TyApp, TyParen, TyList, TyVar, TyFun, TyTuple),
+   Name(Ident),
+   Asst(ClassA),
+   QName(UnQual),
+   Context(CxSingle, CxTuple, CxEmpty))
+
 import Language.Haskell.Exts.Extension
+  (KnownExtension(FlexibleContexts),
+   Extension(EnableExtension))
 
 -----------------------------
 
 specialize :: String -> Either String (String, String)
 specialize a
     = case parseTypeWithMode (defaultParseMode {extensions = [EnableExtension FlexibleContexts]}) a of
-        ParseFailed loc s -> Left $ show s
+        ParseFailed _ s -> Left $ show s
         ParseOk t -> let
 
                 (t',t'') = convert (split t)
@@ -24,7 +36,7 @@ specialize a
             in Right (prettyPrint t', prettyPrint t'')
 
 split :: Type a -> ([(String, [String])], Type a)
-split (TyForall a Nothing (Just l) t)
+split (TyForall _ Nothing (Just l) t)
     = ( map (\x -> (fst (head x), map snd x)) $ groupBy ((==) `on` fst) $ sort $
           let assertions = case l of
                           CxSingle _ (asst) -> [asst]
@@ -41,13 +53,13 @@ convert (m, t) = (app True mm t, app False mm t)  where mm = map resolve m
 
 app :: Bool -> [(String, [[Char]])] -> Type l -> Type l
 app b m t = f t where
-    f (TyFun l a b) = TyFun l (f a) (f b)
+    f (TyFun l a b') = TyFun l (f a) (f b')
     f (TyTuple l_ bo l) = TyTuple l_ bo $ map f l
-    f (TyList l t) = TyList l (f t)
-    f (TyParen l t) = TyParen l (f t)
-    f (TyApp l x t) = TyApp l (f x) (f t)
+    f (TyList l t') = TyList l (f t')
+    f (TyParen l t') = TyParen l (f t')
+    f (TyApp l x t') = TyApp l (f x) (f t')
     f (TyVar l (Ident l' s)) = mkV (head $ [y | (v,x)<-m, v==s, y<-ff  x] ++ ff allT) l l'
-    f t = t
+    f t' = t'
 
     ff = if b then id else reverse
 
@@ -66,4 +78,4 @@ res x | x `elem` ["Num"] = ["Double","Integer"]
 res x | x `elem` ["Integral"] = ["Integer"]
 res x | x `elem` ["Monad"] = ["[]","Maybe"]
 res x | x `elem` ["Ord","Show","Eq","Enum"] = allT
-res x = []  -- !!!
+res _ = []  -- !!!
