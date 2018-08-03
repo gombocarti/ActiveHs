@@ -2,12 +2,13 @@
 
 # Convenience script for running ActiveHs
 
+STACK_WORK=".stack-work"
 ACTIVEHS_SRC="/development/activehs"
-STACK_WORK="${ACTIVEHS_SRC}/.stack-work"
+INIT="/development/init"
 
-if [ -d $STACK_WORK -o -L $STACK_WORK ]; then
-    stack --stack-yaml "${ACTIVEHS_SRC}/stack.yaml" exec activehs -- $@
-else
-    echo "Directory or link ${STACK_WORK} is not found in ${ACTIVEHS_SRC}."
-    exit 1
+if [ ! \( -d "$ACTIVEHS_SRC/$STACK_WORK" -o -L "$ACTIVEHS_SRC/$STACK_WORK" \) ]; then
+    echo "Creating link to $INIT/$STACK_WORK in $ACTIVEHS_SRC."
+    ln -s "$INIT/$STACK_WORK" "$ACTIVEHS_SRC/"
 fi
+
+stack --stack-yaml "${ACTIVEHS_SRC}/stack.yaml" exec activehs -- $@
