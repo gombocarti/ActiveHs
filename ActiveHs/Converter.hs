@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards, ViewPatterns, NamedFieldPuns #-}
 
 module ActiveHs.Converter (
@@ -23,11 +24,9 @@ import qualified Language.Haskell.Exts.Syntax as HSyn
 
 import qualified Data.HashSet as Set
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 import qualified Data.Text.IO as TIO
-import           Text.Blaze ((!))
-import qualified Text.Blaze.Html5 as H
-import qualified Text.Blaze.Html.Renderer.String as HR
-import qualified Text.Blaze.Html5.Attributes as A
+import qualified Lucid as L
 import qualified Text.Pandoc as Pandoc
 
 import System.Process (readProcessWithExitCode)
@@ -55,44 +54,16 @@ import qualified DynFlags
 
 type Converter a = ExceptT ConversionError IO a
 
-data ConversionError
-  = ParseError
-    { generalInfo  :: String
-    , parseDetails :: P.ParseError
-    }
-  | CompilationError
-    { generalInfo :: String
-    , file        :: FilePath
-    , output      :: String
-    }
-  | EvaluationError
-    { generalInfo :: String
-    , expression  :: String
-    , evalDetails :: Either R.Result EvaluationError
-    }
-  | DotError
-    { generalInfo :: String
-    , graph       :: String
-    , dotDetails  :: String
-    }
-  | HtmlGeneratingError
-    { generalInfo :: String
-    }
+data ConversionError = ConversionError
+  { ceGeneralInfo :: T.Text
+  , ceDetails     :: T.Text
+  }
 
-conversionErrorCata :: (String -> P.ParseError -> a)
-                    -> (String -> FilePath -> String -> a)
-                    -> (String -> String -> Either R.Result EvaluationError -> a)
-                    -> (String -> String -> String -> a)
-                    -> (String -> a)
+conversionErrorCata :: (T.Text -> T.Text -> a)
                     -> ConversionError
                     -> a
-conversionError parsing compilation evaluation dot htmlGenerating convErr =
-  case convErr of
-    ParseError general details -> parsing general details
-    CompilationError general file_ output_ -> compilation general file_ output_
-    EvaluationError general expr details -> evaluation general expr details
-    DotError general graph_ details -> dot general graph_ details
-    HtmlGeneratingError general -> htmlGenerating general
+conversionErrorCata f (ConversionError general details) =
+  f general details
 
 data ConverterConfig = ConverterConfig
   { sourceDir  :: FilePath
@@ -111,9 +82,9 @@ convert i18n config logger ghci filename =
         contents <- liftIO $ TIO.readFile filename
         case P.parse contents of
           Right doc -> extract i18n ghci config what doc
-          Left err -> throwError $ ParseError
-            { generalInfo = "Error during parsing"
-            , parseDetails = err
+          Left err -> throwError $ ConversionError
+            { ceGeneralInfo = "Error during parsing"
+            , ceDetails     = T.pack $ show err
             }
   where
     input, output, object :: FilePath
@@ -153,7 +124,7 @@ extract i18n ghci config filename (P.Doc meta header contents) = do
           }
     case Pandoc.runPure $ Pandoc.writeHtml5 options (Pandoc.Pandoc meta ss') of
       Right html -> liftIO $ writeFile' (gendir </> filename <.> "html") html
-      Left err -> throwError $ HtmlGeneratingError { generalInfo = "Error while generating html output." }
+      Left err -> throwError $ ConversionError { ceGeneralInfo = "Error while generating html output." }
 
  where
     ext :: String
@@ -191,31 +162,35 @@ extract i18n ghci config filename (P.Doc meta header contents) = do
               HSyn.Module loc (HSyn.ModuleName "") directives Nothing Nothing
                 ([mkImport modname funnames, mkImport_ ('X':magicname) modname] ++ imps) []
 
-    mkCodeBlock :: [String] -> H.Html
-    mkCodeBlock code = B.well (fromString $ intercalate "\n" code)
+    mkCodeBlock :: [String] -> B.Html
+    mkCodeBlock code = B.card (fromString $ intercalate "\n" code)
 
 ----------------------------
 
-    eval :: String -> Converter R.Result
+    eval :: P.Expression -> P.Correctness -> Converter R.Result
     eval expr correctness = do
       result <- liftIO $ GHCi.evaluate ghci expr i18n
-      case result of
-        Right evalResult -> return evalResult
-        Left evalError -> throwError $
-          EvaluationError
-            { generalInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation"
-            , expression = expr
-            , evalDetails = Left evalResult
+      P.correctnessCata
+        (const (either (throwError . evalErrorToConvError) return result))  -- Correct
+        (const (either (return . evalErrorToResult) (throwError . resultToConvError) result))  -- HasError
+
+        where
+          resultToConvError :: R.Result -> Converter a
+          resultToConvError r = ConversionError
+            { ceGeneralInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation"
+            , ceDetails = i18n $ E.msg_Converter_ShouldBeErroneous "Expression should be erroneous but it is not."
+            }
+          
+          throwEvaluationError :: EvaluationError -> Converter R.Result
+          throwEvaluationError evalError = throwError $ ConversionError
+            { ceGeneralInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation"
+            , ceDetails = T.pack $ show evalError
             }
 
-    inputDescToHtml :: P.InputDesc -> String -> Converter Pandoc.Block
+    inputDescToHtml :: P.InputDesc -> T.Text -> Converter Pandoc.Block
     inputDescToHtml input ident =
       withInputDesc input $ \expr visibility correctness -> do
-        res <- P.correctnessCata
-                 (eval expr)        -- Correct
-                 (Except.catchError -- HasError
-                   (eval expr)
-                   (\err -> R.Error (\generalInfo details -> T.unlines [generalInfo, details]) err))
+        res <- eval expr correctness
         return $ rawHtml $
           P.inputVisibilityCata
             (evaluation res) -- evaluation
@@ -224,41 +199,45 @@ extract i18n ghci config filename (P.Doc meta header contents) = do
             mempty           -- hidden
             visibility
       where
-        evaluation :: R.Result -> H.Html
-        evaluation res = B.form "" $
-          B.textInput (inputId ident) <> (B.well (renderResult res)
-                                            ! A.id (fromString $ resultId ident))
+        evaluation :: R.Result -> B.Html
+        evaluation res = B.form "" $ B.card $ do
+          B.textInput (inputId ident)
+          L.with (renderResult res) [L.id_ (resultId ident)]
 
-        folded :: H.Html
-        folded = B.form "" $
-          B.textInput (inputId ident) <> (B.well mempty
-                                            ! A.id (fromString $ resultId ident))
+        folded :: B.Html
+        folded = B.form "" $ B.card $ do
+          B.textInput (inputId ident)
+          L.with (B.card mempty) [L.id_ (resultId ident)]
 
-        answer :: R.Result -> H.Html
-        answer res = B.well (renderResult res)
+        answer :: R.Result -> B.Html
+        answer res = B.card (renderResult res)
 
-        exercise :: H.Html
-        exercise = B.form "" $
-          B.textInput (inputId ident) <> (B.well mempty
-                                           ! A.id (fromString $ resultId ident))
+        exercise :: B.Html
+        exercise = B.form "" $ B.card $ do
+          B.textInput (inputId ident)
+          L.with (B.card mempty) [L.id_ (resultId ident)]
 
-    inputId :: String -> String
-    inputId ident = ident ++ "_input"
+    inputId :: T.Text -> T.Text
+    inputId ident = fn `T.append` ident `T.append` "_input"
 
-    resultId :: String -> String
-    resultId ident = ident ++ "_result"
+    resultId :: T.Text -> T.Text
+    resultId ident = fn `T.append` ident `T.append` "_result"
+
+    fn :: T.Text
+    fn = T.pack filename
+
+    renderResult :: R.Result -> B.Html
+    renderResult = undefined
 
     processBlock :: Int -> P.Block -> Converter Pandoc.Block
-    processBlock n (P.Example inputdesc) = do
-      result <- eval expression 
-      return $ showExpression expression result (show n)
+    processBlock n (P.Example inputDesc) = inputDescToHtml inputDesc (T.pack $ show n)
     processBlock n (P.OneLineExercise code) = do
       _ <- eval (P.Value code) P.Correct
       let fn = filename ++ "_" ++ show n <.> ext
       writeEx fn [showEnv $ importsHiding Set.empty, "\n" ++ "e = " ++ code]
-      return $ rawHtml $ B.form "" $
-        B.textInput (inputId (show n))
-        <> (B.well mempty ! A.id (fromString $ resultId (show n)))
+      return $ rawHtml $ B.form "" $ do
+        B.textInput (inputId (T.pack $ show n))
+        L.with (B.card mempty) [L.id_ (resultId (T.pack $ show n))]
     processBlock n (P.DefinitionExercise _ visi hidden names tests) = do
         let fn = filename ++ "_" ++ show n <.> ext
             (static_, inForm, rows) = if null hidden
@@ -271,7 +250,7 @@ extract i18n ghci config filename (P.Doc meta header contents) = do
                     ]
         return . rawHtml $
           mkCodeBlock static_ <>
-          B.textArea (inputId (show n))
+          B.textArea (inputId (T.pack $ show n))
     processBlock n (P.Raw (Pandoc.CodeBlock ("",[t],[]) l)) 
         | t `elem` ["dot","neato","twopi","circo","fdp","dfdp","latex"] = do
             tmpdir <- liftIO $ getTemporaryDirectory
@@ -304,18 +283,17 @@ extract i18n ghci config filename (P.Doc meta header contents) = do
                 _       ->  [ t, "-Tpng", "-o", outfile, tmpfile, "2>&1 >/dev/null" ]
 
             if x == ExitSuccess 
-                then return . rawHtml $ H.img ! A.src (fromString imgname)
-                else Except.throwError $ DotError
-                       { generalInfo = "processDot"
-                       , graph = tmpfile
-                       , dotDetails = show x
+                then return . rawHtml $ L.img_ [L.src_ (T.pack imgname)]
+                else Except.throwError $ ConversionError
+                       { ceGeneralInfo = "processDot"
+                       , ceDetails = T.pack $ show x
                        }
     processBlock _ (P.Raw content) = return content
 
 ------------------------------------
 
-rawHtml :: H.Html -> Pandoc.Block
-rawHtml h = Pandoc.RawBlock (Pandoc.Format "html") (HR.renderHtml h)
+rawHtml :: B.Html -> Pandoc.Block
+rawHtml h = Pandoc.RawBlock (Pandoc.Format "html") (TL.unpack $ L.renderText h)
 
 {-
 showBlockSimple :: Language -> String -> String -> Int -> String -> [P.Block]
@@ -370,7 +348,7 @@ mkImport_ magic m
 
 ------------------
 
-isOutOfDate :: MonadIO m => FilePath -> FilePath -> m BOol
+isOutOfDate :: MonadIO m => FilePath -> FilePath -> m Bool
 isOutOfDate x src = do
     a <- modTime x
     b <- modTime src

@@ -2,148 +2,159 @@
 
 module ActiveHs.Bootstrap where
 
-import Data.String (fromString)
-
 import           Data.Monoid ((<>), mconcat, mempty)
-import           Text.Blaze ((!))
-import qualified Text.Blaze as B
-import qualified Text.Blaze.Html5 as H
-import qualified Text.Blaze.Html5.Attributes as A
+import qualified Lucid as L
+import qualified Lucid.Base as L (makeAttribute)
+import qualified Data.Text as T
 
-type Identifier = String
+type Identifier = T.Text
 type Icon = String
 type Style = String
 
-html :: H.Html -> H.Html -> H.Html
-html title content = H.html (htmlHead <> body)
+type Html = L.Html ()
+
+html :: Html -> Html -> Html
+html title content = L.html_ (htmlHead <> body)
   where
-    htmlHead :: H.Html
-    htmlHead = H.head (mconcat [charset, httpEquiv, viewPort, title, bootstrapCss])
+    htmlHead :: Html
+    htmlHead = L.head_ (mconcat [charset, httpEquiv, viewPort, title, bootstrapCss])
 
-    charset :: H.Html
-    charset = H.meta ! A.charset "UTF-8"
+    charset :: Html
+    charset = L.meta_ [ L.charset_ "UTF-8" ]
 
-    httpEquiv :: H.Html
-    httpEquiv = H.meta
-                  ! A.httpEquiv "X-UA-Compatible"
-                  ! A.content "IE=edge"
+    httpEquiv :: Html
+    httpEquiv = L.meta_
+                  [ L.httpEquiv_ "X-UA-Compatible"
+                  , L.content_ "IE=edge"
+                  ]
 
-    viewPort :: H.Html
-    viewPort = H.meta
-                 ! A.name "viewport"
-                 ! A.content "width=device-width, initial-scale=1"
+    viewPort :: Html
+    viewPort = L.meta_
+                 [ L.name_ "viewport"
+                 , L.content_ "width=device-width, initial-scale=1"
+                 ]
 
-    bootstrapCss :: H.Html
-    bootstrapCss = H.link
-                     ! A.href "static/css/bootstrap.min.css"
-                     ! A.rel "stylesheet"
+    bootstrapCss :: Html
+    bootstrapCss = L.link_
+                     [ L.href_ "static/css/bootstrap.min.css"
+                     , L.rel_  "stylesheet"
+                     ]
 
-    body :: H.Html
-    body = H.body (jquery <> bootstrapJs <> content)
+    body :: Html
+    body = L.body_ (jquery <> bootstrapJs <> content)
 
-    jquery :: H.Html
-    jquery = H.script
-               ! A.src "static/js/jquery.min.js"
-               ! A.type_ "javascript"
-               $ mempty
+    jquery :: Html
+    jquery = L.script_
+               [ L.src_ "static/js/jquery.min.js"
+               , L.type_ "javascript"
+               ]
+               (mempty :: Html)
 
-    bootstrapJs :: H.Html
-    bootstrapJs = H.script
-                    ! A.src "static/js/bootstrap.min.js"
-                    ! A.type_ "javascript"
-                    $ mempty
+    bootstrapJs :: Html
+    bootstrapJs = L.script_
+                    [ L.src_ "static/js/bootstrap.min.js"
+                    , L.type_ "javascript"
+                    ]
+                    (mempty :: Html)
 
-pageTitle :: String -> H.Html
-pageTitle = H.title . fromString
+pageTitle :: T.Text -> Html
+pageTitle = L.title_ . L.toHtml
 
-textarea :: H.Html
-textarea = H.textarea
-             ! A.class_ "form-control"
-             ! A.rows "5"
-             $ mempty
+textarea :: Html
+textarea = L.textarea_
+             [ L.class_ "form-control"
+             , L.rows_ "5"
+             ]
+             mempty
 
-button :: String -> H.Html
-button label = H.button
-                 ! A.class_ "btn btn-primary"
-                 ! A.type_ "button"
-                 $ fromString label
+button :: T.Text -> Html
+button label = L.button_
+                 [ L.class_ "btn btn-primary"
+                 , L.type_ "button"
+                 ]
+                 (L.toHtml label)
 
-row :: H.Html -> H.Html
-row = H.div ! A.class_ "row"
+row :: Html -> Html
+row = L.div_ [ L.class_ "row" ]
 
-rowColMd12 :: H.Html -> H.Html
-rowColMd12 = H.div ! A.class_ "col-md-12"
+rowColMd12 :: Html -> Html
+rowColMd12 = L.div_ [ L.class_ "col-md-12" ]
 
-progressbar :: H.Html
-progressbar = H.div
-                ! A.class_ "progress"
-                $ H.div
-                  ! A.class_ "progress-bar progress-bar-striped active"
-                  ! role "progressbar"
-                  ! B.customAttribute "aria-valuenow" "100"
-                  ! B.customAttribute "aria-valuemin" "0"
-                  ! B.customAttribute "aria-valuemax" "100"
-                  $ mempty
+progressbar :: Html
+progressbar = L.div_
+                [ L.class_ "progress" ]
+                $ L.div_
+                  [ L.class_ "progress-bar progress-bar-striped active"
+                  , L.role_ "progressbar"
+                  , L.makeAttribute "aria-valuenow" "100"
+                  , L.makeAttribute "aria-valuemin" "0"
+                  , L.makeAttribute "aria-valuemax" "100"
+                  ]
+                  mempty
 
-textArea :: Identifier -> H.Html
-textArea ident = H.textarea
-                   ! A.class_ "form-control"
-                   ! A.id (fromString ident)
-                   ! A.rows "5"
-                   $ mempty
+textArea :: Identifier -> Html
+textArea ident = L.textarea_
+                   [ L.class_ "form-control"
+                   , L.id_ ident
+                   , L.rows_ "5"
+                   ]
+                   mempty
 
-inputWithAddon :: Identifier -> H.Html -> H.Html
+inputWithAddon :: Identifier -> Html -> Html
 inputWithAddon ident addonContent =
-  H.div
-    ! A.class_ "input-group"
-    $ addon <> textInput ident
+  L.div_
+    [ L.class_ "input-group" ]
+    (addon <> textInput ident)
   where
-    addon :: H.Html
-    addon = H.span
-              ! A.class_ "input-group-addon"
-              $ addonContent
+    addon :: Html
+    addon = L.span_
+              [ L.class_ "input-group-addon" ]
+              addonContent
 
-textInput :: Identifier -> H.Html
+textInput :: Identifier -> Html
 textInput ident =
-  H.input
-    ! A.id (fromString ident)
-    ! A.type_ "text"
-    ! A.class_ "form-control"
+  L.input_
+    [ L.id_ ident
+    , L.type_ "text"
+    , L.class_ "form-control"
+    ]
 
-textInputWithFeedback :: Identifier -> Style -> Icon -> String -> H.Html
-textInputWithFeedback ident style icon srText = 
-  H.div
-    ! A.class_ (fromString (style ++ "form-group has-feedback"))
-    ! B.customAttribute "aria-describedby" (fromString srAidIdent)
+textInputWithFeedback :: Identifier -> Style -> Icon -> T.Text -> Html
+textInputWithFeedback ident style icon srText =
+  L.div_
+    [ L.class_ (T.pack $ style ++ "form-group has-feedback")
+    , L.makeAttribute "aria-describedby" srAidIdent
+    ]
     $ textInput ident <> feedbackIcon <> srAid
   where
-    feedbackIcon :: H.Html
-    feedbackIcon = H.span
-                     ! A.class_ (fromString (icon ++ "glyphicon form-control-feedback"))
-                     ! B.customAttribute "aria-hidden" "true"
-                     $ mempty
+    feedbackIcon :: Html
+    feedbackIcon = L.span_
+                     [ L.class_ (T.pack $ icon ++ "glyphicon form-control-feedback")
+                     , L.makeAttribute "aria-hidden" "true"
+                     ]
+                     mempty
 
     srAidIdent :: Identifier
-    srAidIdent = ident ++ "Status"
+    srAidIdent = T.append ident "Status"
 
-    srAid :: H.Html
-    srAid = H.span
-               ! A.id (fromString srAidIdent)
-               ! A.class_ "sr-only"
-               $ fromString (srText)
+    srAid :: Html
+    srAid = L.span_
+               [ L.id_ srAidIdent
+               , L.class_ "sr-only"
+               ]
+               $ L.toHtml srText
 
-textInputSuccess :: String -> H.Html
+textInputSuccess :: Identifier -> Html
 textInputSuccess ident = textInputWithFeedback ident "has-success" "glyphicon-ok" "success"
 
-textInputFailure :: String -> H.Html
+textInputFailure :: Identifier -> Html
 textInputFailure ident = textInputWithFeedback ident "has-error" "glyphicon-remove" "error"
 
-form :: String -> H.Html -> H.Html
-form action = H.form ! A.action (fromString action)
+form :: T.Text -> Html -> Html
+form action = L.form_ [ L.formaction_ action ]
 
-well :: H.Html -> H.Html
-well = H.div ! A.class_ "well well-sm"
-
-role :: B.AttributeValue -> B.Attribute
-role = B.customAttribute "role"
-
+card :: Html -> Html
+card = L.div_
+         [ L.class_ "card" ]
+         . L.div_
+             [ L.class_ "card-body" ]

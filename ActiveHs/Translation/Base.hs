@@ -68,6 +68,7 @@ generateTranslationEntries entryLabels =
 labels :: [String]
 labels =
   [ "msg_Converter_ErroneousEval"
+  , "msg_Converter_ShouldBeErroneous"
   , "msg_Eval_CantCompareDiagrams"
   , "msg_Eval_CantDecide"
   , "msg_Eval_DontKnowHowToEvaluate"

@@ -4,10 +4,10 @@ module ActiveHs.Result (
     , isError
     ) where
 
-import Data.Data.Compare
+import           Data.Data.Compare
 import qualified Data.Text as T
 
-import Control.DeepSeq
+import           Control.DeepSeq
 
 ---------------------
 
@@ -22,7 +22,7 @@ data Result
     | Message T.Text
     | Error
       { generalInfo :: T.Text
-      , details :: T.Text
+      , details     :: T.Text
       }
     | Dia String
     | TestsPassed

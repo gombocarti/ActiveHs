@@ -187,7 +187,7 @@ pprintData y (WrapData x)
   | otherwise = do
       a <- Eval.eval 1 700 x
       let ([p], _es) = GenFun.numberErrors [a]
-      return . Just $ R.ExprType (show $ GenDoc.toDoc p) y
+      return . Just $ R.ExprType (show $ GenDoc.valueToDoc p) y
 
 pprint :: String -> Dyn.Dynamic -> IO (Maybe R.Result)
 pprint ident d
@@ -252,5 +252,5 @@ compareClearGen lang _ident (WrapData2 x y) = do
 
 -- TODO: do we need this?
 showPair :: (Gen.GenericData, Gen.GenericData) -> (String, String)
-showPair (a, b) = (show (GenDoc.toDoc a'), show (GenDoc.toDoc b'))
+showPair (a, b) = (show (GenDoc.valueToDoc a'), show (GenDoc.valueToDoc b'))
   where ([a', b'], _) = GenFun.numberErrors [a, b]
