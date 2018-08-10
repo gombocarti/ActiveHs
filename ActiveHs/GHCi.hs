@@ -1,7 +1,8 @@
 {-# LANGUAGE PatternGuards #-}
 
 module ActiveHs.GHCi (
-    GHCi
+    eval
+  , GHCi
   , GHCiService(..)
   , runGHCi
   , getI18N

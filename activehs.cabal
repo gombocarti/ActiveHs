@@ -24,8 +24,8 @@ cabal-version:       >=1.8
 build-type:          Simple
 
 data-files:
-    static/css/*.css
-    static/js/*.js
+    static/css/*.min.css
+    static/js/*.min.js
     static/fonts/*.eot
     static/fonts/*.svg
     static/fonts/*.ttf
@@ -73,6 +73,7 @@ Library
 
   Build-Depends:
     aeson,
+    blaze-html,
     highlighting-kate,
     hoogle,
     dia-base,
@@ -116,5 +117,6 @@ Library
 
 Executable activehs
   Build-Depends: base, activehs
+  Hs-Source-Dirs: main
   Main-is: Main.hs
   GHC-Options: -threaded -rtsopts -with-rtsopts=-N2 -Wall -fwarn-tabs -fwarn-monomorphism-restriction -fwarn-missing-import-lists

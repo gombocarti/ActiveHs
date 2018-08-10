@@ -60,6 +60,9 @@ html title content = L.html_ (htmlHead <> body)
 pageTitle :: T.Text -> Html
 pageTitle = L.title_ . L.toHtml
 
+bootstrapPage :: T.Text -> Html -> Html
+bootstrapPage title body = html (pageTitle title) body
+
 textarea :: Html
 textarea = L.textarea_
              [ L.class_ "form-control"
@@ -158,3 +161,25 @@ card = L.div_
          [ L.class_ "card" ]
          . L.div_
              [ L.class_ "card-body" ]
+
+data AlertColor
+  = Success
+  | Warning
+  | Error
+
+alertColorCata :: a -> a -> a -> AlertColor -> a
+alertColorCata success warning error color =
+  case color of
+    Success -> success
+    Warning -> warning
+    Error   -> error
+
+alert :: AlertColor -> Html -> Html
+alert alertColor = L.div_ [ L.class_ "alert", L.class_ color, L.role_ "alert" ]
+  where
+    color :: T.Text
+    color = alertColorCata
+              "alert-success"
+              "alert-warning"
+              "alert-danger"
+              alertColor

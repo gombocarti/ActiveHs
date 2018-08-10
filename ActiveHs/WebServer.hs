@@ -3,13 +3,13 @@
 
 module ActiveHs.WebServer (main) where
 
-import ActiveHs.Bootstrap ()
+import qualified ActiveHs.Bootstrap as B
 
-import Smart hiding (hoogledb)
---import Cache
-import ActiveHs.Converter
+import           ActiveHs.ActiveHsContext (ActiveHsHandler, ActiveHsContext)
+import qualified ActiveHs.ActiveHsContext as Context
+import qualified ActiveHs.Converter as C
 import ActiveHs.Args (Args)
-import qualified ActiveHs.Args
+import qualified ActiveHs.Args as Args
 --import Special
 import qualified ActiveHs.Translation.Entries as E
 import qualified ActiveHs.Translation.Base as B
@@ -19,15 +19,19 @@ import ActiveHs.Logger
 import ActiveHs.Result
 --import Hash
 
+import qualified Lucid as L
 import Snap
 import Snap.Core
-import Snap.Http.Server (httpServe)
-import Snap.Http.Server.Config
+import qualified Snap.Snaplet as Snaplet
+import           Snap.Snaplet.Config (AppConfig)
+import           Snap.Http.Server.Config (Config)
+import qualified Snap.Http.Server.Config as SConf
 import Snap.Util.FileServe (getSafePath, serveDirectoryWith, simpleDirectoryConfig)
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+import qualified System.Directory as Dir
 import System.Exit (exitFailure, exitSuccess)
 import System.FilePath ((</>), takeExtension, dropExtension)
 import System.Directory (doesFileExist)
@@ -60,20 +64,17 @@ data DirectoryConfig = DirectoryConfig
   , staticDir   :: FilePath
   }
 
-newtype ProgramWithArgs = ProgramWithArgs (String, [String])
-
 main :: IO ()
 main = do
-  args <- Args.getArgs
+--  args <- Args.getArgs
 
-  checkArgs args
-  log <- newLogger (Args.logdir args </> "interpreter.log")
+--  checkArgs args
+  log <- newLogger ("log" </> "interpreter.log")
 
-  let i18n = I18N.mkI18N lang
-  ch <- startGHCiServer [sourcedir] log hoogledb
-  cache <- newCache 10
-
-     let mainLogic = httpServe
+  config <- getConfig
+  Snaplet.serveSnaplet config (Context.initActiveHsContext log)
+{-
+  let mainLogic = httpServe
                       ( setPort (Args.port args)
                       . setAccessLog $ ConfigFileLog (logdir </> "access.log")
                       . setErrorLog $ ConfigFileLog (logdir </> "error.log")
@@ -95,13 +96,28 @@ main = do
         hSetBuffering stdin NoBuffering
         _ <- getChar
         killThread t
+-}
   where
-    serveHtml :: MonadSnap m => I18N -> TaskChan -> m ()
-    serveHtml i18n ch = do
+    getConfig :: IO (Config Snap AppConfig)
+    getConfig =
+      let setLogs = SConf.setAccessLog (ConfigFileLog ("log" </> "access.log")) .
+                    SConf.setErrorLog (ConfigFileLog ("log" </> "error.log"))
+      in setLogs <$> SConf.commandLineConfig SConf.defaultConfig
+
+    serveHtml :: FilePath -> FilePath -> Logger -> GETHandler
+    serveHtml sourceDir genDir logger = do
         p <- getSafePath
-        when (not static) $ liftIO $
-            convert i18n ch args $ dropExtension p
-        serveDirectoryWith simpleDirectoryConfig gendir
+        ghci <- Context.getGhciService
+        res <- liftIO $ C.convert sourceDir genDir logger ghci $ dropExtension p
+        either showConversionError (const $ serveDirectoryWith simpleDirectoryConfig genDir) res
+
+    showConversionError :: C.ConversionError -> GETHandler
+    showConversionError convError = do -- TODO I18N
+      writeHtml $ B.bootstrapPage "Error" (B.alert B.Error "Error during conversion")
+      finishWith =<< setResponseCode 500 <$> getResponse
+
+    writeHtml :: B.Html -> ActiveHsHandler v ()
+    writeHtml = writeLazyText . L.renderText
 
     notFound :: Snap ()
     notFound = do
@@ -114,7 +130,7 @@ check pred msg
   | otherwise = do
       putStrLn $ unwords ["ERROR", msg]
       exitFailure
-
+{-
 checkArgs :: Args -> IO ()
 checkArgs args = do
   let dirs = directoryConfig args
@@ -126,12 +142,14 @@ checkArgs args = do
 
   where
     checkIfDirExists :: FilePath -> IO ()
-    checkifDirExists path = do
-      exists <- Dir.doesDirectoryExists path
+    checkIfDirExists path = do
+      exists <- Dir.doesDirectoryExist path
       check exists $ unwords [path, "does not exist"]
+-}
 
-type PostHandler = ActiveHs ()
-
+type POSTHandler = ActiveHsHandler ActiveHsContext ()
+type GETHandler  = ActiveHsHandler ActiveHsContext ()
+{-
 evalHandler :: POSTHandler
 evalHandler = do
     params <- fmap show getParams
@@ -160,7 +178,8 @@ evalHandler = do
   where
     inconsistencyError :: I18N -> H.Html
     inconsistencyError i18n = undefined -- renderResult $ Error True $ i18n $ E.msg_WebServer_Inconsistency "Inconsistency between server and client."
-
+-}
+{-
     eval_ :: String -> T.Text -> T.Text -> [T.Text] -> Maybe SpecialTask
     eval_ _ "eval"  y [_]
         = Just (Eval (T.unpack y)) --- ???
@@ -176,7 +195,7 @@ evalHandler = do
         = Nothing
 
     magicname = undefined
-
+-}
 re :: Read b => T.Text -> Maybe b
 re = readMaybe . T.unpack
 

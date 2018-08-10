@@ -140,6 +140,7 @@ data ParseError
     { generalInfo    :: String
     , haskellDetails :: (HLoc.SrcLoc, String)
     }
+    deriving Show
 
 -----------------------------------
 
