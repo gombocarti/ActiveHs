@@ -108,7 +108,7 @@ main = do
     serveHtml sourceDir genDir logger = do
         p <- getSafePath
         ghci <- Context.getGhciService
-        res <- liftIO $ C.convert sourceDir genDir logger ghci $ dropExtension p
+        res <- liftIO $ C.convert sourceDir genDir logger ghci p
         either showConversionError (const $ serveDirectoryWith simpleDirectoryConfig genDir) res
 
     showConversionError :: C.ConversionError -> GETHandler

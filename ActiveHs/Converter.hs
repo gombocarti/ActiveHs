@@ -95,34 +95,30 @@ convert sourceDir genDir logger ghci filename =
       (do
         let baseName = takeBaseName filename
             input = sourceDir </> baseName <.> "lhs"
-            output = sourceDir </> baseName <.> "html"
-        needsConversion <- isOutOfDate output input
-        when needsConversion $ do
-          logMessage DEBUG $ T.append (T.pack output) " is out of date, regenerating"
-          compile input
-          liftIO $ GHCi.reload ghci input
-          contents <- liftIO $ TIO.readFile input
-          case P.parse contents of
-            Right doc -> do
-              doc' <- extract (I18N.mkI18N lang) ghci input doc
-              let options = Pandoc.def
-                    { Pandoc.writerTableOfContents = True
-                    , Pandoc.writerSectionDivs     = True
-                    }
-              case Pandoc.runPure $ Pandoc.writeHtml5 options doc' of
-                Right html -> do
-                  gendir <- confGenDir <$> config
-                  let path = gendir </> baseName <.> "html"
-                  logAction DEBUG (T.pack $ "Writing " ++ path) $
-                    TLIO.writeFile path (L.renderText $ B.bootstrapPage "ActiveHs" $ L.toHtmlRaw $ B.renderHtml html)
-                Left err -> Except.throwError $ ConversionError
-                  { ceGeneralInfo = "Error while generating html output."
-                  , ceDetails     = ""
+            output = genDir </> baseName <.> "html"
+        logMessage DEBUG $ T.append (T.pack output) " is out of date, regenerating"
+        compile input
+        liftIO $ GHCi.reload ghci input
+        contents <- liftIO $ TIO.readFile input
+        case P.parse contents of
+          Right doc -> do
+            doc' <- extract (I18N.mkI18N lang) ghci input doc
+            let options = Pandoc.def
+                  { Pandoc.writerTableOfContents = True
+                  , Pandoc.writerSectionDivs     = True
                   }
-            Left err -> Except.throwError $ ConversionError
-              { ceGeneralInfo = "Error during parsing"
-              , ceDetails     = T.pack $ show err
-              }
+            case Pandoc.runPure $ Pandoc.writeHtml5 options doc' of
+              Right html -> do
+                logAction DEBUG (T.pack $ "Writing " ++ output) $
+                  TLIO.writeFile output (L.renderText $ B.bootstrapPage "ActiveHs" $ B.rowCol $ L.toHtmlRaw $ B.renderHtml html)
+              Left err -> Except.throwError $ ConversionError
+                { ceGeneralInfo = "Error while generating html output."
+                , ceDetails     = ""
+                }
+          Left err -> Except.throwError $ ConversionError
+            { ceGeneralInfo = "Error during parsing"
+            , ceDetails     = T.pack $ show err
+            }
       )
       (ConverterConfig sourceDir genDir, logger)
   where
@@ -130,12 +126,13 @@ convert sourceDir genDir logger ghci filename =
     compile file = 
       liftIO $ GHC.runGhc (Just libdir) $ do
         dflags <- GHC.getSessionDynFlags
-        let ghciCompatible = DynFlags.updateWays $ dflags
-              { DynFlags.ghcLink = DynFlags.LinkDynLib
-              , DynFlags.hscTarget = DynFlags.HscAsm
-              , DynFlags.ghcMode = DynFlags.CompManager
-              , DynFlags.ways = [DynFlags.WayDyn]
-              }
+        let ghciCompatible = DynFlags.updateWays $
+              DynFlags.setGeneralFlag' DynFlags.Opt_PIC $ dflags
+                { DynFlags.ghcLink = DynFlags.LinkDynLib
+                , DynFlags.hscTarget = DynFlags.HscAsm
+                , DynFlags.ghcMode = DynFlags.CompManager
+                , DynFlags.ways = [DynFlags.WayDyn]
+                }
         GHC.setSessionDynFlags ghciCompatible
         target <- GHC.guessTarget file Nothing
         GHC.setTargets [target]
