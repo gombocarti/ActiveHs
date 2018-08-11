@@ -41,11 +41,18 @@ html title content = L.doctypehtml_ (htmlHead <> body)
                      ]
 
     body :: Html
-    body = L.body_ (jquery <> bootstrapJs <> content)
+    body = L.body_ (jquery <> popper <> bootstrapJs <> content)
 
     jquery :: Html
     jquery = L.script_
                [ L.src_ "static/js/jquery.min.js"
+               , L.type_ "javascript"
+               ]
+               (mempty :: Html)
+
+    popper :: Html
+    popper = L.script_
+               [ L.src_ "static/js/popper.min.js"
                , L.type_ "javascript"
                ]
                (mempty :: Html)
@@ -65,6 +72,9 @@ bootstrapPage title body = html (pageTitle title) (bootstrapFrame body)
 
 bootstrapFrame :: Html -> Html
 bootstrapFrame = L.div_ [ L.class_ "container" ]
+
+rowCol :: Html -> Html
+rowCol = L.div_ [ L.class_ "row" ] . L.div_ [ L.class_ "col" ]
 
 textarea :: Html
 textarea = L.textarea_
