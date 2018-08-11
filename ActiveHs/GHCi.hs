@@ -2,6 +2,7 @@
 
 module ActiveHs.GHCi (
     eval
+  , defaultGHCiService
   , GHCi
   , GHCiService(..)
   , runGHCi
@@ -52,6 +53,11 @@ data GHCiService = GHCiService
 --  , testSolution :: FilePath -> String -> I18N -> IO (Either EvaluationError Result)
   , reload       :: FilePath -> IO ()
   }
+
+defaultGHCiService :: GHCiService
+defaultGHCiService =
+  let eval' expr i18n = runGHCi (eval expr) i18n Nothing
+  in GHCiService eval' (const $ return ())
 
 eval :: P.Expression -> GHCi R.Result
 eval expression = do

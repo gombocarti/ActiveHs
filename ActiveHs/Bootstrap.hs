@@ -14,7 +14,7 @@ type Style = String
 type Html = L.Html ()
 
 html :: Html -> Html -> Html
-html title content = L.html_ (htmlHead <> body)
+html title content = L.doctypehtml_ (htmlHead <> body)
   where
     htmlHead :: Html
     htmlHead = L.head_ (mconcat [charset, httpEquiv, viewPort, title, bootstrapCss])
@@ -61,7 +61,10 @@ pageTitle :: T.Text -> Html
 pageTitle = L.title_ . L.toHtml
 
 bootstrapPage :: T.Text -> Html -> Html
-bootstrapPage title body = html (pageTitle title) body
+bootstrapPage title body = html (pageTitle title) (bootstrapFrame body)
+
+bootstrapFrame :: Html -> Html
+bootstrapFrame = L.div_ [ L.class_ "container" ]
 
 textarea :: Html
 textarea = L.textarea_

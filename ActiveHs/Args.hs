@@ -1,16 +1,12 @@
 {-# LANGUAGE DeriveDataTypeable, NamedFieldPuns #-}
 module ActiveHs.Args where
 
-import Paths_activehs (version)
-
 import Control.Monad (when)
 import System.Directory (createDirectoryIfMissing)
 import System.Console.CmdArgs.Implicit
   (Data, Typeable, (&=), typDir, help, typFile, typ, summary, program, cmdArgs)
 
 import ActiveHs.Translation.Base (Language(En))
-
-import Data.Version (showVersion)
 
 ------------------
 
@@ -50,7 +46,7 @@ defaultArgs = Args
         , recompilecmd  = "ghc -O" &= typ "COMMAND" &= help "Command to run before page generation. Default is 'ghc -O'."
         , magicname    = "a9xYf"  &= typ "VARNAME"  &= help "Magic variable name."
         , daemon       = False                      &= help "Run as a service."
-        }  &= summary ("activehs " ++ showVersion version ++ ", (C) 2010-2012 Péter Diviánszky, 2017 Artúr Poór")
+        }  &= summary ("activehs (C) 2010-2012 Péter Diviánszky, 2017 Artúr Poór")
            &= program "activehs"
 
 createDirs :: Args -> IO ()

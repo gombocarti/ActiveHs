@@ -62,6 +62,7 @@ Library
     ActiveHs.Parser,
     ActiveHs.Result,
     ActiveHs.Specialize,
+    ActiveHs.Translation,
     ActiveHs.Translation.Base,
     ActiveHs.Translation.Dictionary,
     ActiveHs.Translation.Entries,

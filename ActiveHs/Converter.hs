@@ -81,7 +81,7 @@ config :: Converter ConverterConfig
 config = asks fst
 
 logMessage :: LogLevel -> T.Text -> Converter ()
-logMessage level msg = asks snd >>= \logger ->   Logger.logMessage level logger msg
+logMessage level msg = asks snd >>= \logger -> Logger.logMessage level logger msg
 
 logAction :: LogLevel -> T.Text -> IO a -> Converter ()
 logAction level msg m = do
@@ -93,16 +93,32 @@ convert sourceDir genDir logger ghci filename =
   runExceptT $
     runReaderT
       (do
-        let input = sourceDir </> filename <.> "lhs"
-            output = sourceDir </> filename <.> "html"
+        let baseName = takeBaseName filename
+            input = sourceDir </> baseName <.> "lhs"
+            output = sourceDir </> baseName <.> "html"
         needsConversion <- isOutOfDate output input
         when needsConversion $ do
           logMessage DEBUG $ T.append (T.pack output) " is out of date, regenerating"
-          compile filename
-          liftIO $ GHCi.reload ghci filename
-          contents <- liftIO $ TIO.readFile filename
+          compile input
+          liftIO $ GHCi.reload ghci input
+          contents <- liftIO $ TIO.readFile input
           case P.parse contents of
-            Right doc -> extract (I18N.mkI18N lang) ghci filename doc
+            Right doc -> do
+              doc' <- extract (I18N.mkI18N lang) ghci input doc
+              let options = Pandoc.def
+                    { Pandoc.writerTableOfContents = True
+                    , Pandoc.writerSectionDivs     = True
+                    }
+              case Pandoc.runPure $ Pandoc.writeHtml5 options doc' of
+                Right html -> do
+                  gendir <- confGenDir <$> config
+                  let path = gendir </> baseName <.> "html"
+                  logAction DEBUG (T.pack $ "Writing " ++ path) $
+                    TLIO.writeFile path (L.renderText $ B.bootstrapPage "ActiveHs" $ L.toHtmlRaw $ B.renderHtml html)
+                Left err -> Except.throwError $ ConversionError
+                  { ceGeneralInfo = "Error while generating html output."
+                  , ceDetails     = ""
+                  }
             Left err -> Except.throwError $ ConversionError
               { ceGeneralInfo = "Error during parsing"
               , ceDetails     = T.pack $ show err
@@ -136,23 +152,9 @@ convert sourceDir genDir logger ghci filename =
     lang = let (l, _) = span (/= '_') . reverse $ filename
            in maybe Translation.En id (Translation.parseLanguage (reverse l))
 
-extract :: I18N -> GHCiService -> String -> P.Doc -> Converter ()
-extract i18n ghci filename (P.Doc meta header contents) = do
-    ss' <- zipWithM processBlock [1..] contents
-    let options = Pandoc.def
-          { Pandoc.writerTableOfContents = True
-          , Pandoc.writerSectionDivs     = True
-          }
-    case Pandoc.runPure $ Pandoc.writeHtml5 options (Pandoc.Pandoc meta ss') of
-      Right html -> do
-        gendir <- confGenDir <$> config
-        let path = gendir </> filename <.> "html"
-        logAction DEBUG (T.pack $ "Writing " ++ path) $
-          TLIO.writeFile path (B.renderHtml html)
-      Left err -> Except.throwError $ ConversionError
-        { ceGeneralInfo = "Error while generating html output."
-        , ceDetails     = ""
-        }
+extract :: I18N -> GHCiService -> String -> P.Doc -> Converter Pandoc.Pandoc
+extract i18n ghci filename (P.Doc meta header contents) =
+  Pandoc.Pandoc meta <$> zipWithM processBlock [1..] contents
 
  where
     ext :: String
@@ -369,17 +371,17 @@ mkImport_ loc magic m
 
 isOutOfDate :: MonadIO m => FilePath -> FilePath -> m Bool
 isOutOfDate x src = do
-    a <- modTime x
-    b <- modTime src
+    a <- liftIO $ modTime x
+    b <- liftIO $ modTime src
     return $ case (a, b) of
                (Nothing, Just _) -> True
                (Just t1, Just t2) -> t1 < t2
                _   -> False
  where
-   modTime :: MonadIO m => FilePath -> m (Maybe UTCTime)
+   modTime :: FilePath -> IO (Maybe UTCTime)
    modTime f = do
-       a <- liftIO $ doesFileExist f
+       a <- doesFileExist f
        if a
-         then liftIO (fmap Just $ getModificationTime f)
+         then Just <$> getModificationTime f
          else return Nothing
 

@@ -42,7 +42,7 @@ makeLenses ''ActiveHsContext
 initGhciService :: SnapletInit b GhciContext
 initGhciService = S.makeSnaplet "ghci-service" "GHCi service" Nothing $ do
   let eval expr msg = GHCi.runGHCi (GHCi.eval expr) msg Nothing
-  liftIO . makeSnapContext $ GHCiService eval undefined
+  liftIO . makeSnapContext $ GHCiService eval (const $ return ())
 
 initConverterService :: FilePath -> FilePath -> Logger -> SnapletInit b ConverterContext
 initConverterService sourceDir genDir logger =
