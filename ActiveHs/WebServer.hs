@@ -69,10 +69,9 @@ main = do
 --  args <- Args.getArgs
 
 --  checkArgs args
-  log <- newLogger ("log" </> "interpreter.log")
 
   config <- getConfig
-  Snaplet.serveSnaplet config (Context.initActiveHsContext log)
+  Snaplet.serveSnaplet config Context.initActiveHsContext
 {-
   let mainLogic = httpServe
                       ( setPort (Args.port args)
@@ -103,21 +102,14 @@ main = do
       let setLogs = SConf.setAccessLog (ConfigFileLog ("log" </> "access.log")) .
                     SConf.setErrorLog (ConfigFileLog ("log" </> "error.log"))
       in setLogs <$> SConf.commandLineConfig SConf.defaultConfig
-
+{-
     serveHtml :: FilePath -> FilePath -> Logger -> GETHandler
     serveHtml sourceDir genDir logger = do
         p <- getSafePath
         ghci <- Context.getGhciService
         res <- liftIO $ C.convert sourceDir genDir logger ghci p
         either showConversionError (const $ serveDirectoryWith simpleDirectoryConfig genDir) res
-
-    showConversionError :: C.ConversionError -> GETHandler
-    showConversionError convError = do -- TODO I18N
-      writeHtml $ B.bootstrapPage "Error" (B.alert B.Error "Error during conversion")
-      finishWith =<< setResponseCode 500 <$> getResponse
-
-    writeHtml :: B.Html -> ActiveHsHandler v ()
-    writeHtml = writeLazyText . L.renderText
+-}
 
     notFound :: Snap ()
     notFound = do
@@ -148,7 +140,7 @@ checkArgs args = do
 -}
 
 type POSTHandler = ActiveHsHandler ActiveHsContext ()
-type GETHandler  = ActiveHsHandler ActiveHsContext ()
+
 {-
 evalHandler :: POSTHandler
 evalHandler = do

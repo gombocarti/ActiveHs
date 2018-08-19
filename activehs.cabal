@@ -51,26 +51,26 @@ source-repository this
 Library
   GHC-Options: -Wall -fwarn-tabs -fwarn-monomorphism-restriction -fwarn-missing-import-lists
   Exposed-modules:
-    ActiveHs.ActiveHsContext,
-    ActiveHs.Args,
-    ActiveHs.Bootstrap,
-    ActiveHs.Converter,
-    ActiveHs.GHCi,
-    Paths_activehs,
-    ActiveHs.Hoogle,
-    ActiveHs.Logger,
-    ActiveHs.Parser,
-    ActiveHs.Result,
-    ActiveHs.Specialize,
-    ActiveHs.Translation,
-    ActiveHs.Translation.Base,
-    ActiveHs.Translation.Dictionary,
-    ActiveHs.Translation.Entries,
+    ActiveHs.ActiveHsContext
+    ActiveHs.Args
+    ActiveHs.Bootstrap
+    ActiveHs.Converter
+    ActiveHs.GHCi
+    ActiveHs.Hoogle
+    ActiveHs.Logger
+    ActiveHs.Parser
+    ActiveHs.Result
+    ActiveHs.Specialize
+    ActiveHs.Translation
+    ActiveHs.Translation.Base
+    ActiveHs.Translation.Dictionary
+    ActiveHs.Translation.Entries
     ActiveHs.Translation.I18N
     ActiveHs.WebServer
 
   Other-modules:
     ActiveHs.Base
+    Paths_activehs
 
   Build-Depends:
     aeson,

@@ -73,8 +73,17 @@ bootstrapPage title body = html (pageTitle title) (bootstrapFrame body)
 bootstrapFrame :: Html -> Html
 bootstrapFrame = L.div_ [ L.class_ "container" ]
 
+row :: Html -> Html
+row = L.div_ [ L.class_ "row" ]
+
+col :: Html -> Html
+col = L.div_ [ L.class_ "col" ]
+
+col4Offset4 :: Html -> Html
+col4Offset4 = L.div_ [ L.class_ "col-4 offset-md-4" ]
+
 rowCol :: Html -> Html
-rowCol = L.div_ [ L.class_ "row" ] . L.div_ [ L.class_ "col" ]
+rowCol = row . col
 
 textarea :: Html
 textarea = L.textarea_
@@ -89,12 +98,6 @@ button label = L.button_
                  , L.type_ "button"
                  ]
                  (L.toHtml label)
-
-row :: Html -> Html
-row = L.div_ [ L.class_ "row" ]
-
-rowColMd12 :: Html -> Html
-rowColMd12 = L.div_ [ L.class_ "col-md-12" ]
 
 progressbar :: Html
 progressbar = L.div_

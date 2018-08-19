@@ -38,7 +38,7 @@ import qualified Text.Blaze.Html.Renderer.Text as B
 
 import System.Process (readProcessWithExitCode)
 import System.Cmd
-import System.FilePath
+import System.FilePath (takeBaseName, takeDirectory, (</>), (<.>))
 import System.Exit
 import System.Directory (getTemporaryDirectory, getModificationTime, doesFileExist, getTemporaryDirectory, createDirectoryIfMissing)
 import Data.Time (UTCTime) 
@@ -73,8 +73,7 @@ conversionErrorCata f (ConversionError general details) =
   f general details
 
 data ConverterConfig = ConverterConfig
-  { confSourceDir  :: FilePath
-  , confGenDir     :: FilePath
+  { confGenDir     :: FilePath
   }
 
 config :: Converter ConverterConfig
@@ -88,15 +87,16 @@ logAction level msg m = do
   logMessage level msg
   void $ liftIO m
 
-convert :: FilePath -> FilePath -> Logger -> GHCiService -> FilePath -> IO (Either ConversionError ())
-convert sourceDir genDir logger ghci filename =
+convert :: FilePath -> FilePath -> Logger -> GHCiService -> IO (Either ConversionError FilePath)
+convert path genDir logger ghci =
   runExceptT $
     runReaderT
       (do
-        let baseName = takeBaseName filename
+        let sourceDir = takeDirectory path
+            baseName = takeBaseName path
             input = sourceDir </> baseName <.> "lhs"
             output = genDir </> baseName <.> "html"
-        logMessage DEBUG $ T.append (T.pack output) " is out of date, regenerating"
+        logMessage DEBUG $ T.append "Regenerating " (T.pack output)
         compile input
         liftIO $ GHCi.reload ghci input
         contents <- liftIO $ TIO.readFile input
@@ -111,6 +111,7 @@ convert sourceDir genDir logger ghci filename =
               Right html -> do
                 logAction DEBUG (T.pack $ "Writing " ++ output) $
                   TLIO.writeFile output (L.renderText $ B.bootstrapPage "ActiveHs" $ B.rowCol $ L.toHtmlRaw $ B.renderHtml html)
+                return output
               Left err -> Except.throwError $ ConversionError
                 { ceGeneralInfo = "Error while generating html output."
                 , ceDetails     = ""
@@ -120,7 +121,7 @@ convert sourceDir genDir logger ghci filename =
             , ceDetails     = T.pack $ show err
             }
       )
-      (ConverterConfig sourceDir genDir, logger)
+      (ConverterConfig genDir, logger)
   where
     compile :: FilePath -> Converter ()
     compile file = 
@@ -146,7 +147,7 @@ convert sourceDir genDir logger ghci filename =
 
 
     lang :: Translation.Language
-    lang = let (l, _) = span (/= '_') . reverse $ filename
+    lang = let (l, _) = span (/= '_') . reverse $ path
            in maybe Translation.En id (Translation.parseLanguage (reverse l))
 
 extract :: I18N -> GHCiService -> String -> P.Doc -> Converter Pandoc.Pandoc
