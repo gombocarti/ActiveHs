@@ -41,7 +41,7 @@ html title content = L.doctypehtml_ (htmlHead <> body)
                      ]
 
     body :: Html
-    body = L.body_ (jquery <> popper <> bootstrapJs <> content)
+    body = L.body_ (jquery <> bootstrapJs <> content)
 
     jquery :: Html
     jquery = L.script_
@@ -50,16 +50,9 @@ html title content = L.doctypehtml_ (htmlHead <> body)
                ]
                (mempty :: Html)
 
-    popper :: Html
-    popper = L.script_
-               [ L.src_ "static/js/popper.min.js"
-               , L.type_ "javascript"
-               ]
-               (mempty :: Html)
-
     bootstrapJs :: Html
     bootstrapJs = L.script_
-                    [ L.src_ "static/js/bootstrap.min.js"
+                    [ L.src_ "static/js/bootstrap.bundle.min.js"
                     , L.type_ "javascript"
                     ]
                     (mempty :: Html)
@@ -73,17 +66,26 @@ bootstrapPage title body = html (pageTitle title) (bootstrapFrame body)
 bootstrapFrame :: Html -> Html
 bootstrapFrame = L.div_ [ L.class_ "container" ]
 
+pageHeader :: T.Text -> Html
+pageHeader = L.h1_ [ L.class_ "border-bottom" ] . L.toHtml
+
 row :: Html -> Html
 row = L.div_ [ L.class_ "row" ]
 
 col :: Html -> Html
 col = L.div_ [ L.class_ "col" ]
 
-col4Offset4 :: Html -> Html
-col4Offset4 = L.div_ [ L.class_ "col-4 offset-md-4" ]
-
 rowCol :: Html -> Html
 rowCol = row . col
+
+col8 :: Html -> Html
+col8 = L.div_ [ L.class_ "col-8" ]
+
+col4 :: Html -> Html
+col4 = L.div_ [ L.class_ "col-4" ]
+
+col4Offset4 :: Html -> Html
+col4Offset4 = L.div_ [ L.class_ "col-4 offset-4" ]
 
 textarea :: Html
 textarea = L.textarea_

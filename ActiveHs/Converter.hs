@@ -102,15 +102,16 @@ convert path genDir logger ghci =
         contents <- liftIO $ TIO.readFile input
         case P.parse contents of
           Right doc -> do
-            doc' <- extract (I18N.mkI18N lang) ghci input doc
+            doc' <- extract (I18N.mkI18N lang) ghci input (increaseHeaderLevels doc)
             let options = Pandoc.def
                   { Pandoc.writerTableOfContents = True
                   , Pandoc.writerSectionDivs     = True
+                  , Pandoc.writerTemplate        = Just . TL.unpack . L.renderText $ template
                   }
             case Pandoc.runPure $ Pandoc.writeHtml5 options doc' of
               Right html -> do
                 logAction DEBUG (T.pack $ "Writing " ++ output) $
-                  TLIO.writeFile output (L.renderText $ B.bootstrapPage "ActiveHs" $ B.rowCol $ L.toHtmlRaw $ B.renderHtml html)
+                  TLIO.writeFile output (B.renderHtml html)
                 return output
               Left err -> Except.throwError $ ConversionError
                 { ceGeneralInfo = "Error while generating html output."
@@ -149,6 +150,18 @@ convert path genDir logger ghci =
     lang :: Translation.Language
     lang = let (l, _) = span (/= '_') . reverse $ path
            in maybe Translation.En id (Translation.parseLanguage (reverse l))
+
+    increaseHeaderLevels :: P.Doc -> P.Doc
+    increaseHeaderLevels (P.Doc meta header blocks) = P.Doc meta header (map increase blocks)
+      where
+        increase :: P.Block -> P.Block
+        increase (P.Raw (Pandoc.Header n attr text)) = P.Raw (Pandoc.Header (n + 1) attr text)
+        increase b                                   = b
+
+    template :: B.Html
+    template = B.bootstrapPage "$title$" $ do
+      B.row $ B.col (B.pageHeader "$title$")
+      B.row $ B.col8 (L.toHtml ("$body$" :: T.Text)) <> B.col4 (L.div_ [ L.class_ "sticky-top" ] (L.toHtml ("$toc$" :: T.Text)))
 
 extract :: I18N -> GHCiService -> String -> P.Doc -> Converter Pandoc.Pandoc
 extract i18n ghci filename (P.Doc meta header contents) =

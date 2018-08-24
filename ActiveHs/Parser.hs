@@ -1,18 +1,18 @@
 {-# LANGUAGE PatternGuards #-}
 
 module ActiveHs.Parser (
-    Doc (..)
-  , Block (..)
-  , Name
+    Block (..)
   , Correctness (..)
   , correctnessCata
+  , Doc (..)
   , Expression (..)
   , expressionCata
+  , getCode
   , InputDesc (..)
   , inputDescCata
   , InputVisibility (..)
   , inputVisibilityCata
-  , getCode
+  , Name
   , ParseError (..)
   , parse
   , printName

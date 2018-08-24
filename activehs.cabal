@@ -25,6 +25,7 @@ build-type:          Simple
 
 data-files:
     static/css/*.min.css
+    static/js/bootstrap.bundle.min.js
     static/js/*.min.js
     static/fonts/*.eot
     static/fonts/*.svg
