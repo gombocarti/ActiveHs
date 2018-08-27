@@ -70,22 +70,28 @@ pageHeader :: T.Text -> Html
 pageHeader = L.h1_ [ L.class_ "border-bottom" ] . L.toHtml
 
 row :: Html -> Html
-row = L.div_ [ L.class_ "row" ]
+row = L.div_ [ L.class_ "row " ]
 
 col :: Html -> Html
-col = L.div_ [ L.class_ "col" ]
+col = L.div_ [ L.class_ "col " ]
 
 rowCol :: Html -> Html
 rowCol = row . col
 
 col8 :: Html -> Html
-col8 = L.div_ [ L.class_ "col-8" ]
+col8 = L.div_ [ L.class_ "col-8 " ]
 
 col4 :: Html -> Html
-col4 = L.div_ [ L.class_ "col-4" ]
+col4 = L.div_ [ L.class_ "col-4 " ]
+
+colMd8 :: Html -> Html
+colMd8 = L.div_ [ L.class_ "col-md-8 " ]
+
+colMd4 :: Html -> Html
+colMd4 = L.div_ [ L.class_ "col-md-4 " ]
 
 col4Offset4 :: Html -> Html
-col4Offset4 = L.div_ [ L.class_ "col-4 offset-4" ]
+col4Offset4 = L.div_ [ L.class_ "col-4 offset-4 " ]
 
 textarea :: Html
 textarea = L.textarea_

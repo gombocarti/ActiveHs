@@ -161,7 +161,10 @@ convert path genDir logger ghci =
     template :: B.Html
     template = B.bootstrapPage "$title$" $ do
       B.row $ B.col (B.pageHeader "$title$")
-      B.row $ B.col8 (L.toHtml ("$body$" :: T.Text)) <> B.col4 (L.div_ [ L.class_ "sticky-top" ] (L.toHtml ("$toc$" :: T.Text)))
+      B.row $ toc <> B.colMd8 (L.toHtml ("$body$" :: T.Text))
+        where
+          toc :: B.Html
+          toc = L.with (B.colMd4 (L.div_ [ L.class_ "sticky-top" ] (L.toHtml ("$toc$" :: T.Text)))) [ L.class_ "order-md-2" ]
 
 extract :: I18N -> GHCiService -> String -> P.Doc -> Converter Pandoc.Pandoc
 extract i18n ghci filename (P.Doc meta header contents) =
