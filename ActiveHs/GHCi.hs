@@ -141,7 +141,9 @@ loadFile filename = lift $ GHC.loadModules [filename]
 
 runGHCi :: GHCi a -> I18N -> Maybe FilePath -> IO (Either EvaluationError a)
 runGHCi m i18n hoogleDb = do
-  result <- GHC.runInterpreter (runReaderT m (GHCiContext i18n hoogleDb))
+  result <- GHC.runInterpreter $ do
+    GHC.setImports ["Prelude"]
+    runReaderT m (GHCiContext i18n hoogleDb)
   return $ case result of
              Right a -> Right a
              Left err -> Left (toEvaluationError err)

@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module ActiveHs.Parser (
     Block (..)
@@ -7,6 +8,7 @@ module ActiveHs.Parser (
   , Doc (..)
   , Expression (..)
   , expressionCata
+  , expressionToText
   , getCode
   , InputDesc (..)
   , inputDescCata
@@ -27,10 +29,10 @@ import qualified Language.Haskell.Exts.Syntax as HSyn
 import qualified Language.Haskell.Exts.SrcLoc as HLoc
 
 import           Control.Arrow ((&&&))
-import           Data.Bifunctor (bimap)
+import           Data.Bifunctor (bimap, second)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import           Data.Char (isLower, toLower)
+import           Data.Char (isUpper, toLower)
 import qualified Data.DList as DL
 import           Data.Generics (mkQ, extQ, something, everythingBut, GenericQ, Data)
 import           Data.Maybe (catMaybes, isJust)
@@ -112,6 +114,14 @@ expressionCata
     Kind s -> kind s
     Value s -> value s
 
+expressionToText :: Expression -> T.Text
+expressionToText = expressionCata
+                     (const "")
+                     (const "")
+                     (\e -> ":t " `T.append` T.pack e)
+                     (\e -> ":k " `T.append` T.pack e)
+                     T.pack
+
 getCode :: Expression -> String
 getCode = expressionCata id id id id id
 
@@ -184,7 +194,7 @@ parse contents =
                   ]
               where
                 c, expr :: T.Text
-                (c, expr) = T.breakOn (T.pack "> ") t
+                (c, expr) = second (T.drop 2) $ T.breakOn (T.pack "> ") t
             statementToCode t = t
 
             commentLine :: T.Text -> Bool
@@ -231,7 +241,7 @@ parsePrompt p = (,) <$> parseVisibility (toLower p) <*> Just (parseCorrectness p
     parseVisibility _   = Nothing
 
     parseCorrectness :: Char -> Correctness
-    parseCorrectness c = if isLower c then Correct else HasError
+    parseCorrectness c = if isUpper c then Correct else HasError
 
 expressionSyntax :: R.Regex
 expressionSyntax = R.compile (BC.pack "^[[:space:]]*(:[[:alpha:]][[:space:]])?[[:space:]]*(.+)") []
@@ -240,8 +250,8 @@ parseExpression :: String -> Maybe Expression
 parseExpression s = do
   matches <- R.match expressionSyntax (BC.pack s) []
   case matches of
-    [expr] -> return $ Value (BC.unpack expr)
-    [prompt, expr] -> do
+    [_, "", expr] -> return $ Value (BC.unpack expr)
+    [_, prompt, expr] -> do
       f <- Map.lookup prompt prompts
       return (f (BC.unpack expr))
     _ -> fail ("Invalid expression parse: " ++ s)

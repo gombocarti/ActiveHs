@@ -65,13 +65,14 @@ type Converter a = ReaderT (ConverterConfig, Logger) (ExceptT ConversionError IO
 data ConversionError = ConversionError
   { ceGeneralInfo :: T.Text
   , ceDetails     :: T.Text
+  , ceSource      :: T.Text
   }
 
-conversionErrorCata :: (T.Text -> T.Text -> a)
+conversionErrorCata :: (T.Text -> T.Text -> T.Text -> a)
                     -> ConversionError
                     -> a
-conversionErrorCata f (ConversionError general details) =
-  f general details
+conversionErrorCata f (ConversionError general details source) =
+  f general details source
 
 data ConverterConfig = ConverterConfig
   { confGenDir     :: FilePath
@@ -116,10 +117,12 @@ convert path genDir logger ghci = do
               Left err -> Except.throwError $ ConversionError
                 { ceGeneralInfo = "Error while generating html output."
                 , ceDetails     = ""
+                , ceSource      = ""
                 }
           Left err -> Except.throwError $ ConversionError
             { ceGeneralInfo = "Error during parsing"
             , ceDetails     = T.pack $ show err
+            , ceSource      = ""
             }
       )
       (ConverterConfig genDir, logger)
@@ -147,15 +150,21 @@ convert path genDir logger ghci = do
           throwConvError _ = Except.throwError $ ConversionError 
             { ceGeneralInfo = "Error during compilation"
             , ceDetails = T.pack file
+            , ceSource  = ""
             }
 
     showConversionError :: Logger -> FilePath -> ConversionError -> IO ()
-    showConversionError logger output convError = do -- TODO I18N
+    showConversionError logger output (ConversionError general details source) = do -- TODO I18N
       Logger.logMessage DEBUG logger (T.pack $ "Writing " ++ output)
       TLIO.writeFile output $ L.renderText errorPage
       where
         errorPage :: B.Html
-        errorPage = B.bootstrapPage "Error" (B.alert B.Error "Error during conversion")
+        errorPage = B.bootstrapPage "Error" $
+          B.alert B.Error $ do
+            L.h1_ $ L.toHtml general
+            L.p_ $ L.toHtml details
+            L.p_ $ L.toHtml ("During processing of:" :: T.Text)
+            L.pre_ $ L.toHtml source
 
     lang :: Translation.Language
     lang = let (l, _) = span (/= '_') . reverse $ path
@@ -236,15 +245,16 @@ extract i18n ghci filename (P.Doc meta header contents) =
             correctness
             where
               evalErrToConvErr :: GHCi.EvaluationError -> ConversionError
-              evalErrToConvErr = GHCi.evaluationErrorCata ConversionError
+              evalErrToConvErr = GHCi.evaluationErrorCata (\general details -> ConversionError general details (P.expressionToText expr))
 
               evalErrToResult :: GHCi.EvaluationError -> R.Result
               evalErrToResult = GHCi.evaluationErrorCata R.Error
 
               resultToConvErr :: R.Result -> ConversionError
               resultToConvErr _ = ConversionError
-                { ceGeneralInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation."
+                { ceGeneralInfo = i18n $ E.msg_Converter_ErroneousEval "Erroneous evaluation"
                 , ceDetails = i18n $ E.msg_Converter_ShouldBeErroneous "Expression should be erroneous but it is correct."
+                , ceSource = P.expressionToText expr
                 }
         
         evaluation :: R.Result -> B.Html
@@ -275,7 +285,7 @@ extract i18n ghci filename (P.Doc meta header contents) =
     fn = T.pack filename
 
     renderResult :: R.Result -> B.Html
-    renderResult = undefined
+    renderResult _ = B.card mempty
 
     processBlock :: Int -> P.Block -> Converter Pandoc.Block
     processBlock n (P.Example inputDesc) = inputDescToHtml inputDesc (T.pack $ show n)

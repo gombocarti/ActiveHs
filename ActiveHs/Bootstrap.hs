@@ -199,7 +199,7 @@ alertColorCata success warning error color =
     Error   -> error
 
 alert :: AlertColor -> Html -> Html
-alert alertColor = L.div_ [ L.class_ "alert", L.class_ color, L.role_ "alert" ]
+alert alertColor = L.div_ [ L.class_ $ "alert " `T.append` color, L.role_ "alert" ]
   where
     color :: T.Text
     color = alertColorCata
