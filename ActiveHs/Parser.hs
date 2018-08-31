@@ -93,37 +93,29 @@ inputVisibilityCata
 
 -- | A Haskell expression, possibly incorrect
 data Expression
-  = HoogleQuery String
-  | HoogleQueryInfo String
-  | Type String
+  = Type String
   | Kind String
   | Value String
 
-expressionCata :: (String -> a) -> (String -> a) -> (String -> a) -> (String -> a) -> (String -> a) -> Expression -> a
+expressionCata :: (String -> a) -> (String -> a) -> (String -> a) -> Expression -> a
 expressionCata
-  hoogle
-  hoogleInfo
   type_
   kind
   value
   e =
   case e of
-    HoogleQuery s -> hoogle s
-    HoogleQueryInfo s -> hoogleInfo s
     Type s -> type_ s
     Kind s -> kind s
     Value s -> value s
 
 expressionToText :: Expression -> T.Text
 expressionToText = expressionCata
-                     (const "")
-                     (const "")
                      (\e -> ":t " `T.append` T.pack e)
                      (\e -> ":k " `T.append` T.pack e)
                      T.pack
 
 getCode :: Expression -> String
-getCode = expressionCata id id id id id
+getCode = expressionCata id id id
 
 inputDescCata :: (Expression -> InputVisibility -> Correctness -> a) -> InputDesc -> a
 inputDescCata f (InputDesc expr visibility correctness) = f expr visibility correctness
@@ -259,9 +251,7 @@ parseExpression s = do
     where
       prompts :: Map.HashMap B.ByteString (String -> Expression)
       prompts = Map.fromList
-        [ (BC.pack ":h ", HoogleQuery)
-        , (BC.pack ":i ", HoogleQueryInfo)
-        , (BC.pack ":t ", Type)
+        [ (BC.pack ":t ", Type)
         , (BC.pack ":k ", Kind)
         ]
 

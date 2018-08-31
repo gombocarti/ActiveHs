@@ -238,7 +238,7 @@ extract i18n ghci filename (P.Doc meta header contents) =
       where
         eval :: P.Expression -> P.Correctness -> Converter R.Result
         eval expr correctness = do
-          res <- liftIO $ GHCi.evaluate ghci expr i18n
+          res <- liftIO $ GHCi.evaluate ghci expr filename i18n
           P.correctnessCata
             (either (Except.throwError . evalErrToConvErr) return res) -- Correct
             (either (return . evalErrToResult) (Except.throwError . resultToConvErr) res) -- HasError
@@ -285,7 +285,7 @@ extract i18n ghci filename (P.Doc meta header contents) =
     fn = T.pack filename
 
     renderResult :: R.Result -> B.Html
-    renderResult _ = B.card mempty
+    renderResult _ = L.pre_ (L.toHtml ("result" :: T.Text))
 
     processBlock :: Int -> P.Block -> Converter Pandoc.Block
     processBlock n (P.Example inputDesc) = inputDescToHtml inputDesc (T.pack $ show n)

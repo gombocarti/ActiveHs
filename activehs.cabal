@@ -57,7 +57,6 @@ Library
     ActiveHs.Bootstrap
     ActiveHs.Converter
     ActiveHs.GHCi
-    ActiveHs.Hoogle
     ActiveHs.Logger
     ActiveHs.Parser
     ActiveHs.Result
@@ -77,7 +76,6 @@ Library
     aeson,
     blaze-html,
     highlighting-kate,
-    hoogle,
     dia-base,
     dia-functions,
     data-pprint,

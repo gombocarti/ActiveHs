@@ -41,7 +41,7 @@ makeLenses ''ActiveHsContext
 
 initGhciService :: SnapletInit b GHCiService
 initGhciService = S.makeSnaplet "ghci-service" "GHCi service" Nothing $ do
-  let eval expr msg = GHCi.runGHCi (GHCi.eval expr) msg Nothing
+  let eval expr msg = GHCi.runGHCi (GHCi.eval expr) msg
   return $ GHCiService eval (const $ return ())
 
 initLogService :: FilePath -> SnapletInit b Logger

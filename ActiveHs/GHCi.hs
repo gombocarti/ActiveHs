@@ -7,13 +7,11 @@ module ActiveHs.GHCi (
   , GHCiService(..)
   , runGHCi
   , getI18N
-  , getHoogleDb
   , EvaluationError(..)
   , evaluationErrorCata
   ) where
 
 import           ActiveHs.Base (WrapData(WrapData), WrapData2(WrapData2))
-import qualified ActiveHs.Hoogle as H
 import qualified ActiveHs.Parser as P
 import qualified ActiveHs.Result as R
 import           ActiveHs.Specialize (specialize)
@@ -31,8 +29,8 @@ import qualified Graphics.Diagrams.FunctionGraphs as FunGraph
 import qualified Graphics.Diagrams.SVG as SVG
 
 import           Control.DeepSeq (force)
-import           Control.Monad.Reader (ReaderT, runReaderT, asks)
 import qualified Control.Monad.Catch as MC
+import           Control.Monad.Reader (ReaderT, runReaderT, asks)
 import           Control.Monad.Trans (lift, liftIO)
 import qualified Data.Data as Data
 import qualified Data.Dynamic as Dyn
@@ -45,34 +43,33 @@ type GHCi a = ReaderT GHCiContext GHC.Interpreter a
 
 data GHCiContext = GHCiContext
   { g_i18n     :: I18N
-  , g_hoogleDb :: Maybe FilePath
   }
 
 data GHCiService = GHCiService
-  { evaluate     :: P.Expression -> I18N -> IO (Either EvaluationError R.Result)
+  { evaluate     :: P.Expression -> String -> I18N -> IO (Either EvaluationError R.Result)
 --  , testSolution :: FilePath -> String -> I18N -> IO (Either EvaluationError Result)
   , reload       :: FilePath -> IO ()
   }
 
 defaultGHCiService :: GHCiService
 defaultGHCiService =
-  let eval' expr i18n = runGHCi (eval expr) i18n Nothing
+  let eval' expr module_ i18n = runGHCi (eval expr) module_ i18n
   in GHCiService eval' (const $ return ())
 
 eval :: P.Expression -> GHCi R.Result
 eval expression = do
   i18n <- getI18N
+  liftIO $ putStrLn $ "evaluating " ++ P.getCode expression
   force <$> P.expressionCata
-              hoogle
-              hoogleInfo
               (\expr -> do
                 type_ <- lift $ GHC.typeOf expr
                 return $ R.ExprType expr type_)
               (\type_ -> do
                 kind <- lift $ GHC.kindOf type_
                 return $ R.TypeKind type_ kind)
-              (\expr -> (exprType expr >>= exprPpr) `catchE`
-                \tyErr -> (typeKind expr) `orElse` (hoogleInfo expr) `orElse` MC.throwM tyErr)
+              (\expr ->
+                exprPpr expr `catchE`
+                  \tyErr -> (typeKind expr) `orElse` MC.throwM tyErr)
               expression
 
   where
@@ -100,13 +97,17 @@ eval expression = do
               return res
 
     pprData :: String -> String -> GHCi (Maybe R.Result)
-    pprData expr type_ =  do
-      wd <- lift $ GHC.interpret ("wrapData (" ++ GHC.parens expr ++ " :: " ++ type_ ++")") (GHC.as :: WrapData)
+    pprData expr type_ = do
+      wd <- lift $ do
+        GHC.setImports ["ActiveHs.Base"]
+        GHC.interpret ("wrapData (" ++ GHC.parens expr ++ " :: " ++ type_ ++")") (GHC.as :: WrapData)
       liftIO (pprintData type_ wd)
 
     ppr :: String -> String -> GHCi (Maybe R.Result)
     ppr expr type_ = do
-      dyn <- lift $ GHC.interpret ("toDyn (" ++ GHC.parens expr ++ " :: " ++ type_ ++")") (GHC.as :: Dyn.Dynamic)
+      dyn <- lift $ do
+        GHC.setImports ["Data.Dynamic"]
+        GHC.interpret ("toDyn (" ++ GHC.parens expr ++ " :: " ++ type_ ++")") (GHC.as :: Dyn.Dynamic)
       liftIO (pprint "" dyn)
 
     typeKind :: String -> GHCi R.Result
@@ -114,36 +115,21 @@ eval expression = do
        k <- lift $ GHC.kindOf expr
        return $ R.TypeKind expr k
 
-    hoogle :: String -> GHCi R.Result
-    hoogle term = do
-      i18n <- getI18N
-      getHoogleDb >>= maybe (noHoogle i18n term) (\db -> liftIO $ H.query db term)
-
-    hoogleInfo :: String -> GHCi R.Result
-    hoogleInfo term = do
-      i18n <- getI18N
-      getHoogleDb >>= maybe (noHoogle i18n term) (\db -> liftIO $ H.queryInfo i18n db term)
-
-    noHoogle :: I18N -> String -> GHCi R.Result
-    noHoogle i18n term = return (noInfo i18n term)
-
     orElse :: GHCi a -> GHCi a -> GHCi a
     orElse x y = x `catchE` \_ -> y
 
     catchE :: GHCi a -> (GHC.InterpreterError -> GHCi a) -> GHCi a
     catchE = MC.catch
 
-    noInfo :: I18N -> String -> R.Result
-    noInfo i18n query = R.Message (translateParam1Str i18n (E.msg_Eval_NoHoogleInfo "No info for %s") query)
-
 loadFile :: String -> GHCi ()
 loadFile filename = lift $ GHC.loadModules [filename]
 
-runGHCi :: GHCi a -> I18N -> Maybe FilePath -> IO (Either EvaluationError a)
-runGHCi m i18n hoogleDb = do
+runGHCi :: GHCi a -> String -> I18N -> IO (Either EvaluationError a)
+runGHCi m module_ i18n = do
   result <- GHC.runInterpreter $ do
+    GHC.loadModules [module_]
     GHC.setImports ["Prelude"]
-    runReaderT m (GHCiContext i18n hoogleDb)
+    runReaderT m (GHCiContext i18n)
   return $ case result of
              Right a -> Right a
              Left err -> Left (toEvaluationError err)
@@ -183,9 +169,6 @@ evaluationErrorCata f (EvaluationError generalInfo details) = f generalInfo deta
 
 getI18N :: GHCi I18N
 getI18N = asks g_i18n
-
-getHoogleDb :: GHCi (Maybe FilePath)
-getHoogleDb = asks g_hoogleDb
 
 -----
 
