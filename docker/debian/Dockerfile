@@ -32,11 +32,6 @@ RUN apt-get update && \
       libpcre3-dev \
       pkg-config
 
-# Build ActiveHs dependencies
-COPY activehs.cabal stack.yaml /development/init/
-RUN stack --stack-yaml=/development/init/stack.yaml setup
-RUN stack --stack-yaml=/development/init/stack.yaml --no-system-ghc build --only-dependencies
-
 # Make convenience scripts available
 RUN ln -s /development/activehs/docker/container-script/build /development/activehs/docker/container-script/run /usr/local/bin/
     
@@ -54,6 +49,17 @@ RUN apt-get update && \
 RUN echo en_US.UTF-8 UTF-8 >> /etc/locale.gen && \
     locale-gen
 ENV LC_ALL en_US.UTF-8
+
+# Create user
+RUN adduser --system --uid 1000 --group dev
+USER dev
+
+# Build ActiveHs dependencies
+COPY --chown=dev activehs.cabal stack.yaml /development/init/
+RUN stack --stack-yaml=/development/init/stack.yaml setup
+RUN stack --stack-yaml=/development/init/stack.yaml --no-system-ghc build --only-dependencies
+
+ENV STACK_YAML=/development/activehs/stack.yaml
 
 VOLUME /development/activehs
 VOLUME /activehs-server
