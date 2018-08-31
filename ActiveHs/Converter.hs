@@ -34,11 +34,12 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TLIO
 import qualified Lucid as L
 import qualified Text.Pandoc as Pandoc
-import qualified Text.Blaze.Html.Renderer.Text as B
+import qualified Text.Blaze.Html.Renderer.Text as Blaze
 
 import System.Process (readProcessWithExitCode)
 import System.Cmd
 import System.FilePath (takeBaseName, takeDirectory, (</>), (<.>))
+import Control.Exception (IOException, try)
 import System.Exit
 import System.Directory (getTemporaryDirectory, getModificationTime, doesFileExist, getTemporaryDirectory, createDirectoryIfMissing)
 import Data.Time (UTCTime) 
@@ -87,15 +88,15 @@ logAction level msg m = do
   logMessage level msg
   void $ liftIO m
 
-convert :: FilePath -> FilePath -> Logger -> GHCiService -> IO (Either ConversionError FilePath)
-convert path genDir logger ghci =
-  runExceptT $
+convert :: FilePath -> FilePath -> Logger -> GHCiService -> IO FilePath
+convert path genDir logger ghci = do
+  let sourceDir = takeDirectory path
+      baseName = takeBaseName path
+      input = sourceDir </> baseName <.> "lhs"
+      output = genDir </> baseName <.> "html"
+  res <- runExceptT $
     runReaderT
       (do
-        let sourceDir = takeDirectory path
-            baseName = takeBaseName path
-            input = sourceDir </> baseName <.> "lhs"
-            output = genDir </> baseName <.> "html"
         logMessage DEBUG $ T.append "Regenerating " (T.pack output)
         compile input
         liftIO $ GHCi.reload ghci input
@@ -111,8 +112,7 @@ convert path genDir logger ghci =
             case Pandoc.runPure $ Pandoc.writeHtml5 options doc' of
               Right html -> do
                 logAction DEBUG (T.pack $ "Writing " ++ output) $
-                  TLIO.writeFile output (B.renderHtml html)
-                return output
+                  TLIO.writeFile output (Blaze.renderHtml html)
               Left err -> Except.throwError $ ConversionError
                 { ceGeneralInfo = "Error while generating html output."
                 , ceDetails     = ""
@@ -123,29 +123,39 @@ convert path genDir logger ghci =
             }
       )
       (ConverterConfig genDir, logger)
+  either (showConversionError logger output) return res
+  return output
   where
     compile :: FilePath -> Converter ()
-    compile file = 
-      liftIO $ GHC.runGhc (Just libdir) $ do
+    compile file = do 
+      result <- liftIO $ try $ GHC.runGhc (Just libdir) $ do
         dflags <- GHC.getSessionDynFlags
-        let ghciCompatible = DynFlags.updateWays $
-              DynFlags.setGeneralFlag' DynFlags.Opt_PIC $ dflags
-                { DynFlags.ghcLink = DynFlags.LinkDynLib
+        let ghciCompatible = DynFlags.updateWays $ 
+              DynFlags.addWay' DynFlags.WayDyn $ dflags
+                { DynFlags.ghcLink = DynFlags.NoLink
                 , DynFlags.hscTarget = DynFlags.HscAsm
                 , DynFlags.ghcMode = DynFlags.CompManager
-                , DynFlags.ways = [DynFlags.WayDyn]
                 }
         GHC.setSessionDynFlags ghciCompatible
         target <- GHC.guessTarget file Nothing
         GHC.setTargets [target]
         GHC.load GHC.LoadAllTargets
         return ()
-{-        throwError $ CompilationError
-        { generalInfo = "Error during compilation"
-        , file = input
-        , output = err
-        } -}
+      either throwConvError (const $ return ()) result
+        where
+          throwConvError :: IOException -> Converter a
+          throwConvError _ = Except.throwError $ ConversionError 
+            { ceGeneralInfo = "Error during compilation"
+            , ceDetails = T.pack file
+            }
 
+    showConversionError :: Logger -> FilePath -> ConversionError -> IO ()
+    showConversionError logger output convError = do -- TODO I18N
+      Logger.logMessage DEBUG logger (T.pack $ "Writing " ++ output)
+      TLIO.writeFile output $ L.renderText errorPage
+      where
+        errorPage :: B.Html
+        errorPage = B.bootstrapPage "Error" (B.alert B.Error "Error during conversion")
 
     lang :: Translation.Language
     lang = let (l, _) = span (/= '_') . reverse $ path

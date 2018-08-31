@@ -17,56 +17,42 @@ import           ActiveHs.Translation.I18N (I18N)
 import qualified Paths_activehs as Paths
 
 import           Control.Applicative ((<|>))
+import           Control.Concurrent (forkIO)
+import           Control.Exception (catch, IOException)
 import           Control.Lens (makeLenses, view)
+import           Control.Monad (void, forM_, forM)
 import           Control.Monad.Trans (liftIO)
 import           Data.IORef (IORef, readIORef, newIORef)
 import qualified Lucid as L
 import           Snap.Snaplet (Snaplet, Handler, SnapletInit)
 import qualified Snap as S
 import qualified Snap.Util.FileServe as SF
-import           System.FilePath ((</>), (<.>), takeExtension)
+import           System.FilePath ((</>), (<.>), takeExtension, replaceExtension)
+import           System.Directory (listDirectory, getModificationTime)
 
 type ActiveHsHandler s a = Handler ActiveHsContext s a
 
-newtype SnapContext a = SnapContext (IORef a)
-
-makeSnapContext :: a -> IO (SnapContext a)
-makeSnapContext = fmap SnapContext . newIORef
-
-type GhciContext      = SnapContext GHCiService
-type LogContext       = SnapContext LogService
-
-newtype LogService = LogService { unLogService :: Logger }
-
 data ActiveHsContext = ActiveHsContext
-  { _ghciContext      :: Snaplet GhciContext
-  , _logContext       :: Snaplet LogContext
+  { _ghciContext      :: Snaplet GHCiService
+  , _logContext       :: Snaplet Logger
   }
 
 makeLenses ''ActiveHsContext
 
-initGhciService :: SnapletInit b GhciContext
+initGhciService :: SnapletInit b GHCiService
 initGhciService = S.makeSnaplet "ghci-service" "GHCi service" Nothing $ do
   let eval expr msg = GHCi.runGHCi (GHCi.eval expr) msg Nothing
-  liftIO . makeSnapContext $ GHCiService eval (const $ return ())
+  return $ GHCiService eval (const $ return ())
 
-initLogService :: FilePath -> SnapletInit b LogContext
+initLogService :: FilePath -> SnapletInit b Logger
 initLogService p = S.makeSnaplet "log-service" "Log Service" Nothing $
-  liftIO $ do
-    logger <- Logger.newLogger p
-    makeSnapContext $ LogService logger
+  liftIO $ Logger.newLogger p
 
 getGhciService :: ActiveHsHandler ActiveHsContext GHCiService
-getGhciService = S.with ghciContext $ do
-  s <- S.getSnapletState
-  let SnapContext mvar = view S.snapletValue s
-  liftIO $ readIORef mvar
+getGhciService = S.with ghciContext $ view S.snapletValue <$> S.getSnapletState
 
 getLogger :: ActiveHsHandler ActiveHsContext Logger
-getLogger = S.with logContext $ do
-  s <- S.getSnapletState
-  let SnapContext mvar = view S.snapletValue s
-  unLogService <$> liftIO (readIORef mvar)
+getLogger = S.with logContext $ view S.snapletValue <$> S.getSnapletState
 
 initActiveHsContext :: SnapletInit ActiveHsContext ActiveHsContext
 initActiveHsContext = S.makeSnaplet "activehs" "ActiveHs" Nothing $ do
@@ -75,9 +61,14 @@ initActiveHsContext = S.makeSnaplet "activehs" "ActiveHs" Nothing $ do
 
   dataDir <- liftIO $ Paths.getDataDir
 
-  S.addRoutes [ ("static", SF.serveDirectoryWith SF.simpleDirectoryConfig (dataDir </> "static"))
-              , ("", S.method S.GET servePage <|> notFound)
+  S.addRoutes [ ("static", S.method S.GET (SF.serveDirectoryWith SF.simpleDirectoryConfig (dataDir </> "static")))
+              , ("", S.method S.GET servePage)
               ]
+  
+  S.addPostInitHook (\context -> do
+                        forkIO $ convertAllFiles (view (ghciContext . S.snapletValue) context) (view (logContext . S.snapletValue) context)
+                        return $ Right context
+                    )
   
   return $ ActiveHsContext ghci logger
 
@@ -85,16 +76,9 @@ initActiveHsContext = S.makeSnaplet "activehs" "ActiveHs" Nothing $ do
     servePage :: ActiveHsHandler ActiveHsContext ()
     servePage = do
       p <- SF.getSafePath
-      ghci <- getGhciService
-      logger <- getLogger
-      res <- liftIO $ C.convert p "." logger ghci
-      either showConversionError SF.serveFile res
-
-      where
-        showConversionError :: C.ConversionError -> GETHandler
-        showConversionError convError = do -- TODO I18N
-          writeHtml $ Bootstrap.bootstrapPage "Error" (Bootstrap.alert Bootstrap.Error "Error during conversion")
-          S.finishWith =<< S.setResponseCode 500 <$> S.getResponse
+      if null p
+        then SF.serveFile "Index.html"
+        else SF.serveFile (replaceExtension p ".html")
 
     writeHtml :: Bootstrap.Html -> ActiveHsHandler v ()
     writeHtml = S.writeLazyText . L.renderText
@@ -104,5 +88,20 @@ initActiveHsContext = S.makeSnaplet "activehs" "ActiveHs" Nothing $ do
       writeHtml $ Bootstrap.bootstrapPage "Error" (Bootstrap.col4Offset4 "Page not found")
       S.getResponse >>= S.finishWith . S.setResponseCode 404
 
+    convertAllFiles :: GHCiService -> Logger -> IO ()
+    convertAllFiles ghci logger = do
+      lhsFiles <- filter ((== ".lhs") . takeExtension) <$> listDirectory "."
+      forM_ lhsFiles $ \f -> do
+        let outDir = "."
+            objectFile = replaceExtension f ".o"
+            html   = replaceExtension f ".html"
+        fModTime <- getModificationTime f
+        outdated <- forM [objectFile, html] $ \p ->
+                      catch
+                        ((< fModTime) <$> getModificationTime p)
+                        (const (return True) :: IOException -> IO Bool)
+        if or outdated
+          then void $ C.convert f outDir logger ghci
+          else return ()
 
 type GETHandler  = ActiveHsHandler ActiveHsContext ()
