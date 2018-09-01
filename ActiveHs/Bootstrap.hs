@@ -64,7 +64,8 @@ bootstrapPage :: T.Text -> Html -> Html
 bootstrapPage title body = html (pageTitle title) (bootstrapFrame body)
 
 bootstrapFrame :: Html -> Html
-bootstrapFrame = L.div_ [ L.class_ "container" ]
+bootstrapFrame body = L.nav_ [ L.class_ "navbar sticky-top" ] (L.div_ [ L.class_ "text-danger font-weight-bold" ] (L.toHtml ("beta version" :: T.Text))) <>
+                      L.div_ [ L.class_ "container" ] body
 
 pageHeader :: T.Text -> Html
 pageHeader = L.h1_ [ L.class_ "border-bottom" ] . L.toHtml
