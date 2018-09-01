@@ -36,7 +36,7 @@ import qualified Data.Data as Data
 import qualified Data.Dynamic as Dyn
 import qualified Data.Text as T
 import qualified Language.Haskell.Interpreter as GHC
-import           System.FilePath (FilePath)
+import           System.FilePath (FilePath, takeBaseName)
 import qualified Text.XHtml as XH
 
 type GHCi a = ReaderT GHCiContext GHC.Interpreter a
@@ -59,7 +59,6 @@ defaultGHCiService =
 eval :: P.Expression -> GHCi R.Result
 eval expression = do
   i18n <- getI18N
-  liftIO $ putStrLn $ "evaluating " ++ P.getCode expression
   force <$> P.expressionCata
               (\expr -> do
                 type_ <- lift $ GHC.typeOf expr
@@ -99,14 +98,12 @@ eval expression = do
     pprData :: String -> String -> GHCi (Maybe R.Result)
     pprData expr type_ = do
       wd <- lift $ do
-        GHC.setImports ["ActiveHs.Base"]
         GHC.interpret ("wrapData (" ++ GHC.parens expr ++ " :: " ++ type_ ++")") (GHC.as :: WrapData)
       liftIO (pprintData type_ wd)
 
     ppr :: String -> String -> GHCi (Maybe R.Result)
     ppr expr type_ = do
       dyn <- lift $ do
-        GHC.setImports ["Data.Dynamic"]
         GHC.interpret ("toDyn (" ++ GHC.parens expr ++ " :: " ++ type_ ++")") (GHC.as :: Dyn.Dynamic)
       liftIO (pprint "" dyn)
 
@@ -128,7 +125,11 @@ runGHCi :: GHCi a -> String -> I18N -> IO (Either EvaluationError a)
 runGHCi m module_ i18n = do
   result <- GHC.runInterpreter $ do
     GHC.loadModules [module_]
-    GHC.setImports ["Prelude"]
+    GHC.setImports ["Prelude"
+                   , takeBaseName module_
+                   , "ActiveHs.Base"
+                   , "Data.Dynamic"
+                   ]
     runReaderT m (GHCiContext i18n)
   return $ case result of
              Right a -> Right a
@@ -136,7 +137,7 @@ runGHCi m module_ i18n = do
     where
       toEvaluationError :: GHC.InterpreterError -> EvaluationError
       toEvaluationError err = EvaluationError
-        { errGeneralInfo = i18n $ interpreterErrorCata 
+        { errGeneralInfo = i18n $ interpreterErrorCata
                              (const (E.msg_Eval_WontCompile "Won't compile"))
                              (const (E.msg_Eval_UnknownError "Unknown error"))
                              (const (E.msg_Eval_NotAllowed "Not allowed"))

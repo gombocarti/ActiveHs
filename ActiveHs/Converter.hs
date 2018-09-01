@@ -219,8 +219,8 @@ extract i18n ghci filename (P.Doc meta header contents) =
           { ceGeneralInfo = "Invalid source file."
           , ceDetails     = T.unwords ["File ", T.pack filename, " does not seem to be a Haskell source file." ]
           }
-    mkCodeBlock :: [String] -> B.Html
-    mkCodeBlock code = B.card (fromString $ intercalate "\n" code)
+    codeBlock :: [String] -> B.Html
+    codeBlock code = L.pre_ (L.toHtml $ intercalate "\n" code)
 
 ----------------------------
 
@@ -299,8 +299,8 @@ extract i18n ghci filename (P.Doc meta header contents) =
         let (static_, inForm, rows) = if null hidden
               then ([], visi, length visi) 
               else (visi, [], 2 + length hidden)
-        return . rawHtml $
-          mkCodeBlock static_ <>
+        return . rawHtml $ B.card $ do
+          codeBlock static_
           B.textArea (inputId (T.pack $ show n))
     processBlock n (P.Raw (Pandoc.CodeBlock (_, [t], _) l))
         | t `elem` ["dot","neato","twopi","circo","fdp","dfdp","latex"] = do
