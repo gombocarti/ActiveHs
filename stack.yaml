@@ -2,13 +2,13 @@ packages:
   - '.'
 extra-deps:
   - git: https://github.com/poor-a/ActiveHs-misc.git
-    commit: 03492d21fd695554f6031b363c833e7c9e5b4ad6
+    commit: 9ec93e61f04a90592f3915e949040a815e481684
     subdirs:
+      - activehs-base
       - data-pprint
       - dia-base
       - dia-functions
-  - activehs-base-0.3.0.4
   - snap-1.0.0.2
   - heist-1.0.1.1
   - map-syntax-0.2.0.2
-resolver: lts-10.2
+resolver: lts-12.1
