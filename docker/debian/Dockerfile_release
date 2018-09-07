@@ -1,0 +1,28 @@
+FROM poora/activehs-debian
+
+SHELL ["/bin/bash", "-c"]
+
+# Create user
+RUN adduser --quiet --no-create-home --disabled-login --system --uid 20001 --group activehs
+
+# Copy activehs
+COPY *.lhs *.hs /usr/local/activehs/release/
+COPY --chown=activehs ActiveHs /usr/local/activehs/release/ActiveHs
+
+RUN mkdir /usr/local/activehs/release/log && \
+    chown activehs /usr/local/activehs/{release,release/log}
+
+# Build activehs
+
+USER dev
+
+RUN cd ~ && \
+    git clone https://github.com/poor-a/ActiveHs.git activehs && \
+    cd activehs && \
+    ln -s /development/init/.stack-work ./ && \
+    stack build --ghc-options "-dynamic"
+
+VOLUME /usr/local/activehs
+# VOLUME /usr/local/bin/log
+
+WORKDIR /usr/local/activehs/release

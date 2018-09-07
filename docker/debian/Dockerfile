@@ -57,11 +57,9 @@ USER dev
 # Build ActiveHs dependencies
 COPY --chown=dev activehs.cabal stack.yaml /development/init/
 RUN stack --stack-yaml=/development/init/stack.yaml setup
-RUN stack --stack-yaml=/development/init/stack.yaml --no-system-ghc build --only-dependencies
-
-ENV STACK_YAML=/development/activehs/stack.yaml
+RUN stack --stack-yaml=/development/init/stack.yaml --no-system-ghc build --only-dependencies --ghc-options "-dynamic"
 
 VOLUME /development/activehs
 VOLUME /activehs-server
 
-WORKDIR /activehs-server
+USER root
