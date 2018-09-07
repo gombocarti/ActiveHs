@@ -125,9 +125,8 @@ runGHCi :: GHCi a -> String -> I18N -> IO (Either EvaluationError a)
 runGHCi m module_ i18n = do
   result <- GHC.runInterpreter $ do
     GHC.loadModules [module_]
-    GHC.setImports ["Prelude"
-                   , takeBaseName module_
-                   , "ActiveHs.Base"
+    GHC.setTopLevelModules [takeBaseName module_]
+    GHC.setImports [ "ActiveHs.Base"
                    , "Data.Dynamic"
                    ]
     runReaderT m (GHCiContext i18n)

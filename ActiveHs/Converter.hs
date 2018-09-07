@@ -54,9 +54,10 @@ import Data.List
 import Data.Char hiding (Format)
 import Data.String (fromString)
 
+import qualified DynFlags
 import qualified GHC
 import           GHC.Paths (libdir)
-import qualified DynFlags
+import qualified Panic
 
 ----------------------------------
 
@@ -133,7 +134,7 @@ convert path genDir logger ghci = do
     compile file = do 
       result <- liftIO $ try $ GHC.runGhc (Just libdir) $ do
         dflags <- GHC.getSessionDynFlags
-        let ghciCompatible = DynFlags.updateWays $ 
+        let ghciCompatible = DynFlags.updateWays $
               DynFlags.addWay' DynFlags.WayDyn $ dflags
                 { DynFlags.ghcLink = DynFlags.NoLink
                 , DynFlags.hscTarget = DynFlags.HscAsm
@@ -147,10 +148,10 @@ convert path genDir logger ghci = do
       either throwConvError (const $ return ()) result
         where
           throwConvError :: IOException -> Converter a
-          throwConvError _ = Except.throwError $ ConversionError 
+          throwConvError e = Except.throwError $ ConversionError 
             { ceGeneralInfo = "Error during compilation"
-            , ceDetails = T.pack file
-            , ceSource  = ""
+            , ceDetails = T.pack $ Panic.showException e
+            , ceSource  = T.pack file
             }
 
     showConversionError :: Logger -> FilePath -> ConversionError -> IO ()
