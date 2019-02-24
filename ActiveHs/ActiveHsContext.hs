@@ -27,8 +27,8 @@ import qualified Lucid as L
 import           Snap.Snaplet (Snaplet, Handler, SnapletInit)
 import qualified Snap as S
 import qualified Snap.Util.FileServe as SF
-import           System.FilePath ((</>), (<.>), takeExtension, replaceExtension)
-import           System.Directory (listDirectory, getModificationTime)
+import           System.FilePath ((</>), (<.>), takeExtension, replaceExtension, takeDirectory)
+import           System.Directory (listDirectory, getModificationTime, createDirectoryIfMissing)
 
 type ActiveHsHandler s a = Handler ActiveHsContext s a
 
@@ -46,7 +46,9 @@ initGhciService = S.makeSnaplet "ghci-service" "GHCi service" Nothing $ do
 
 initLogService :: FilePath -> SnapletInit b Logger
 initLogService p = S.makeSnaplet "log-service" "Log Service" Nothing $
-  liftIO $ Logger.newLogger p
+  liftIO $ do
+    createDirectoryIfMissing True (takeDirectory p)
+    Logger.newLogger p
 
 getGhciService :: ActiveHsHandler ActiveHsContext GHCiService
 getGhciService = S.with ghciContext $ view S.snapletValue <$> S.getSnapletState
