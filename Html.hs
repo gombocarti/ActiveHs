@@ -136,7 +136,6 @@ showInterpreter lang limit act i prompt exp result =
         ! [ theclass "interpreter"
           , thetype "text"
           , size $ show limit
-          , maxlength 1000
           , identifier $ "tarea" ++ i
           , value $ if prompt == 'R' then "" else exp
           ]

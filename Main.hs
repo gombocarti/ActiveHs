@@ -89,10 +89,6 @@ mainWithArgs args@(Args {verbose, port, static, logdir, hoogledb, staticdir, pub
 exerciseServer :: [FilePath] -> TaskChan -> Args -> Snap ()
 exerciseServer sourcedirs ch args@(Args {magicname, lang, exercisedir, verboseinterpreter}) = do
     params <- fmap show getParams
-    when (length params > 3000) $ do
-        writeText "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>Too long request.</body></html>"
-        getResponse >>= finishWith . setResponseCode 400
-
     let md5Id = mkHash params   -- could be more efficient
     liftIO $ logStrMsg 2 (logger ch) $ " eval " ++ show md5Id ++ " " ++ params
 --  (>>= writeText)
